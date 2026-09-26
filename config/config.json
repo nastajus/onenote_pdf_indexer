@@ -1,0 +1,11 @@
+{
+  "client_id": "6cec4b20-48ea-4029-a408-e115dbbaca5e",
+  "tenant_id": "e35c50e7-4b2c-4039-abae-a66722cdc54a",
+  "authority": "https://login.microsoftonline.com/consumers",
+  "scopes": [
+    "User.Read",
+    "Notes.Read",
+    "offline_access"
+  ]
+}
+

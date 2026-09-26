@@ -1,0 +1,4 @@
+fonttools>=4.0.0
+msal>=1.31.0
+pypdf>=5.0.0
+requests>=2.32.0

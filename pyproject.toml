@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "onenote-pdf-indexer"
+version = "0.1.0"
+description = "Local OneNote PDF indexing tools"
+requires-python = ">=3.11"
+dependencies = [
+  "fonttools>=4.0.0",
+  "msal>=1.31.0",
+  "pypdf>=5.0.0",
+  "requests>=2.32.0",
+]
+
+[project.scripts]
+onenote-indexer = "onenote_indexer.cli:main"
+onenote-indexer-web = "onenote_indexer.webapp:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
