@@ -1,0 +1,39 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "OneNote UI: Chrome",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://127.0.0.1:8765",
+      "webRoot": "${workspaceFolder}/web",
+      "preLaunchTask": "Start OneNote web server"
+    },
+    {
+      "name": "Debug OneNote web server",
+      "type": "python",
+      "request": "launch",
+      "module": "onenote_indexer.webapp",
+      "args": [
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8765"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Debug OneNote CLI: notebooks",
+      "type": "python",
+      "request": "launch",
+      "module": "onenote_indexer",
+      "args": [
+        "notebooks"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}
+
