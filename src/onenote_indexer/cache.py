@@ -137,6 +137,14 @@ def get_pdf_text(db: sqlite3.Connection, page_id: str, resource_url: str) -> dic
     return json.loads(row["data"]) if row else None
 
 
+def has_pdf_text(db: sqlite3.Connection, page_id: str, resource_url: str) -> bool:
+    row = db.execute(
+        "select 1 from pdf_text where page_id = ? and resource_url = ?",
+        (page_id, resource_url),
+    ).fetchone()
+    return row is not None
+
+
 def put_pdf_text(db: sqlite3.Connection, page_id: str, resource_url: str, data: dict[str, Any]) -> None:
     with db:
         db.execute(
@@ -162,6 +170,30 @@ def get_resource_blob(db: sqlite3.Connection, url: str) -> dict[str, Any] | None
         "sha256": row["sha256"],
         "body": row["body"],
     }
+
+
+def get_resource_blob_info(db: sqlite3.Connection, url: str) -> dict[str, Any] | None:
+    row = db.execute(
+        "select url, content_type, size, sha256 from resource_blobs where url = ?",
+        (url,),
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "url": row["url"],
+        "content_type": row["content_type"],
+        "size": row["size"],
+        "sha256": row["sha256"],
+    }
+
+
+def has_resource_blob(db: sqlite3.Connection, url: str) -> bool:
+    return get_resource_blob_info(db, url) is not None
+
+
+def total_resource_blob_bytes(db: sqlite3.Connection) -> int:
+    row = db.execute("select coalesce(sum(size), 0) as size from resource_blobs").fetchone()
+    return int(row["size"] if row else 0)
 
 
 def put_resource_blob(db: sqlite3.Connection, url: str, body: bytes, content_type: str | None = None) -> dict[str, Any]:

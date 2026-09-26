@@ -9,6 +9,7 @@ from .auth import get_access_token
 from .config import load_config
 from .graph import GraphClient
 from .page_html import extract_resources
+from .warm_cache import WarmCacheOptions, warm_cache
 
 
 def main() -> None:
@@ -18,11 +19,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Connect to OneNote through Microsoft Graph.")
     parser.add_argument(
         "command",
-        choices=["auth", "whoami", "notebooks", "sections", "pages", "resources"],
+        choices=["auth", "whoami", "notebooks", "sections", "pages", "resources", "warm-cache"],
         help="Command to run.",
     )
     parser.add_argument("--page-id", help="OneNote page ID for commands that inspect a single page.")
     parser.add_argument("--limit", type=int, default=25, help="Maximum pages to show for the pages command.")
+    parser.add_argument("--max-pages", type=int, default=100, help="Maximum pages to inspect for warm-cache.")
+    parser.add_argument("--max-mb", type=int, default=750, help="Maximum new resource bytes to download, in MB.")
+    parser.add_argument("--delay", type=float, default=1.0, help="Delay between Graph fetches for warm-cache.")
+    parser.add_argument("--section", help="Only warm sections whose names contain this text.")
+    parser.add_argument("--include-images", action="store_true", help="Also cache image resources, not just PDFs.")
+    parser.add_argument("--no-text", action="store_true", help="Do not extract PDF text during warm-cache.")
+    parser.add_argument("--refresh-metadata", action="store_true", help="Refresh section/page/resource metadata while warming.")
     parser.add_argument("--json", action="store_true", help="Print raw JSON.")
     parser.add_argument("--force-login", action="store_true", help="Ignore cached tokens and sign in again.")
     parser.add_argument("--device-code", action="store_true", help="Use a device-code login instead of browser callback.")
@@ -58,6 +66,21 @@ def main() -> None:
         else:
             for index, resource in enumerate(resources, start=1):
                 print(f"{index}. tag: {resource.tag} | kind: {resource.kind} | alt: {resource.alt} | url: {resource.url}")
+    elif args.command == "warm-cache":
+        stats = warm_cache(
+            graph,
+            WarmCacheOptions(
+                max_pages=args.max_pages,
+                max_bytes=args.max_mb * 1024 * 1024,
+                delay_seconds=args.delay,
+                section_filter=args.section,
+                extract_text=not args.no_text,
+                include_images=args.include_images,
+                refresh_metadata=args.refresh_metadata,
+            ),
+            log=lambda message: print(message, flush=True),
+        )
+        print_json_or_table(stats.__dict__, args.json)
 
 
 def print_json_or_table(payload: Any, raw_json: bool, fields: list[str] | None = None) -> None:

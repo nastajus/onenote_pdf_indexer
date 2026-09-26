@@ -84,6 +84,24 @@ Other debug options:
 Use **Refresh** to force a fresh Graph fetch for notebooks, sections, and the selected section.
 Use **Refresh Selected** to refresh the selected page/section and prune cached resource data for resources that no longer match the OneNote page.
 
+## Warm The Cache
+
+Run a throttled cache fill from PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m onenote_indexer warm-cache --max-pages 100 --max-mb 750 --delay 1.0
+```
+
+Defaults are conservative: PDFs only, PDF text extraction enabled, 100 pages inspected, 750 MB max new downloads, and a 1 second delay around Graph fetches. The command is resumable and skips already cached PDFs.
+
+Useful variants:
+
+```powershell
+.\.venv\Scripts\python.exe -m onenote_indexer warm-cache --section "anapole" --max-pages 50
+.\.venv\Scripts\python.exe -m onenote_indexer warm-cache --include-images --max-mb 250
+.\.venv\Scripts\python.exe -m onenote_indexer warm-cache --refresh-metadata
+```
+
 ## Git Checkpoints
 
 Project-local Git automation lives at:
