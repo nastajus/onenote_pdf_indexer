@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OneNote PDF Indexer</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>OneNote PDF Indexer</h1>
+          <p id="accountStatus">Checking Microsoft Graph connection...</p>
+        </div>
+        <button id="refreshButton" type="button">Refresh</button>
+      </header>
+
+      <section class="toolbar" aria-label="Search controls">
+        <input id="queryInput" type="search" placeholder="Filter page titles in the selected section" />
+      </section>
+
+      <section class="grid">
+        <aside class="panel">
+          <h2>Notebooks</h2>
+          <div id="notebooksList" class="list">Loading...</div>
+          <h2>Sections</h2>
+          <div id="sectionsList" class="list">Loading...</div>
+        </aside>
+
+        <section class="panel">
+          <h2>Pages</h2>
+          <div id="pagesList" class="list">Select a section to load its pages.</div>
+        </section>
+
+        <section class="panel">
+          <h2>Embedded Resources</h2>
+          <div id="resourcesList" class="list">Select a page to inspect its PDF/image resources.</div>
+        </section>
+      </section>
+
+      <section class="control-dock" aria-label="View controls">
+        <div class="control-group" role="group" aria-label="Resource view mode">
+          <button id="viewPdfButton" class="mode-button active" type="button" title="Show embedded PDF">
+            <span aria-hidden="true">▣</span>
+            PDF
+          </button>
+          <button id="viewTextButton" class="mode-button" type="button" title="Show extracted text">
+            <span aria-hidden="true">◇</span>
+            Text
+          </button>
+        </div>
+        <button id="refreshSelectedButton" class="secondary-button" type="button">Refresh Selected</button>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
