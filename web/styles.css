@@ -313,7 +313,8 @@ input {
   min-width: 0;
 }
 
-.cache-mark {
+.cache-mark,
+.page-mark {
   align-items: center;
   border: 1px solid #98a2b3;
   border-radius: 999px;
@@ -323,6 +324,11 @@ input {
   height: 26px;
   justify-content: center;
   width: 26px;
+}
+
+.page-mark {
+  background: #f8fafc;
+  border-color: #b8c7e0;
 }
 
 button.item {
@@ -428,49 +434,13 @@ button.item.active {
   padding-right: 10px;
 }
 
-.onenote-preview {
-  background:
-    linear-gradient(90deg, rgba(18, 103, 196, 0.05) 1px, transparent 1px),
-    linear-gradient(rgba(24, 32, 42, 0.045) 1px, transparent 1px),
-    #fffdf7;
-  background-size: 34px 34px;
-  border: 1px solid #d9d2bd;
-  border-radius: 6px;
-  display: grid;
-  gap: 14px;
-  max-height: calc(100vh - 230px);
-  min-height: 520px;
-  overflow: auto;
-  padding: 20px;
-}
-
-.preview-note {
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(216, 222, 232, 0.85);
-  border-radius: 6px;
-  color: #344054;
-  font-size: 13px;
-  line-height: 1.45;
-  padding: 12px;
-}
-
-.preview-image {
-  background: #ffffff;
-  border: 1px solid #c8ced8;
-  border-radius: 3px;
-  box-shadow: 0 12px 28px rgba(24, 32, 42, 0.12);
-  display: block;
-  justify-self: center;
-  max-width: min(100%, 980px);
-  min-height: 120px;
-  object-fit: contain;
+.onenote-html-frame {
   width: 100%;
-}
-
-.preview-resource-grid {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  height: calc(100vh - 245px);
+  min-height: 760px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fffdf7;
 }
 
 .resource-summary {

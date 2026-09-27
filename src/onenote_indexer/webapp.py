@@ -13,7 +13,7 @@ from .auth import get_access_token
 from . import cache
 from .config import PROJECT_ROOT, load_config
 from .graph import GraphClient
-from .page_html import extract_resources
+from .page_html import extract_resources, render_onenote_html
 from .pdf_text import extract_pdf_text
 
 
@@ -81,9 +81,7 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
                         page["_section"] = section
                     cache.replace_pages(db, section_id, pages)
                 for page in pages:
-                    page["_cache"] = {
-                        "resource_count": cache.resource_count(db, page["id"]),
-                    }
+                    page["_cache"] = _page_cache_summary(cache.get_resources(db, page["id"]))
                 self._send_json(pages)
                 return
 
@@ -107,6 +105,28 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
                     cache.delete_missing_resource_data(db, page_id, new_urls)
                     cache.replace_resources(db, page_id, resources)
                 self._send_json(resources)
+                return
+
+            if path == "/api/page-html":
+                page_id = query.get("page_id", [""])[0]
+                if not page_id:
+                    self._send_json({"error": "Missing page_id"}, status=400)
+                    return
+                try:
+                    html, diagnostics = _page_content_with_fallback(get_graph(), db, page_id)
+                except RuntimeError as exc:
+                    self._send_json({"error": str(exc), "page": cache.get_page(db, page_id)}, status=404)
+                    return
+
+                resources = [resource.__dict__ for resource in extract_resources(html)]
+                cache.replace_resources(db, page_id, resources)
+                self._send_json(
+                    {
+                        "html": render_onenote_html(html),
+                        "resources": resources,
+                        "diagnostics": diagnostics,
+                    }
+                )
                 return
 
             if path == "/api/search":
@@ -302,6 +322,28 @@ def _content_type_for_resource(resource_url: str, query: dict[str, list[str]]) -
     if "application/pdf" in kind:
         return "application/pdf"
     return "application/octet-stream"
+
+
+def _page_cache_summary(resources: list[dict[str, Any]]) -> dict[str, int | bool]:
+    pdf_count = sum(1 for resource in resources if _is_pdf_resource(resource))
+    image_count = sum(1 for resource in resources if _is_image_resource(resource))
+    return {
+        "resource_count": len(resources),
+        "pdf_count": pdf_count,
+        "image_count": image_count,
+        "native_hint": bool(resources and pdf_count == 0),
+    }
+
+
+def _is_pdf_resource(resource: dict[str, Any]) -> bool:
+    kind = str(resource.get("kind", "")).lower()
+    url = str(resource.get("url", "")).lower()
+    return kind == "application/pdf" or "application/pdf" in kind or ".pdf" in url
+
+
+def _is_image_resource(resource: dict[str, Any]) -> bool:
+    kind = str(resource.get("kind", "")).lower()
+    return kind == "image-fullres" or kind.startswith("image/")
 
 
 def _page_content_with_fallback(graph: GraphClient, db, page_id: str) -> tuple[str, list[dict[str, str]]]:

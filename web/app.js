@@ -8,7 +8,6 @@ const state = {
   pages: [],
   resources: [],
   viewMode: localStorage.getItem("onenote-view-mode") || "pdf",
-  showPagePreview: localStorage.getItem("onenote-show-page-preview") !== "0",
   searchPdfContent: localStorage.getItem("onenote-search-pdf") === "1",
   showDates: localStorage.getItem("onenote-show-dates") !== "0",
   panelFontStep: Number.parseInt(localStorage.getItem("onenote-panel-font-step") || "0", 10),
@@ -42,13 +41,6 @@ const cacheProgressFill = document.querySelector("#cacheProgressFill");
 const cacheProgressLabel = document.querySelector("#cacheProgressLabel");
 const cacheProgressCount = document.querySelector("#cacheProgressCount");
 
-if (state.viewMode === "page") {
-  state.viewMode = "pdf";
-  state.showPagePreview = true;
-  localStorage.setItem("onenote-view-mode", "pdf");
-  localStorage.setItem("onenote-show-page-preview", "1");
-}
-
 document.querySelector("#refreshButton").addEventListener("click", () => {
   loadBasics({ refresh: true });
 });
@@ -66,7 +58,7 @@ viewTextButton.addEventListener("click", () => {
 });
 
 viewPageButton.addEventListener("click", () => {
-  setPagePreviewMode(!state.showPagePreview);
+  setViewMode("page");
 });
 
 searchPdfButton.addEventListener("click", () => {
@@ -462,11 +454,15 @@ function renderPages() {
   pagesList.innerHTML = "";
   for (const page of pages) {
     const button = document.createElement("button");
-    const resourceCount = page._cache?.resource_count || 0;
+    const cacheInfo = page._cache || {};
+    const resourceCount = cacheInfo.resource_count || 0;
+    const pdfCount = cacheInfo.pdf_count || 0;
     button.className = `item page-item${page.id === state.selectedPage?.id ? " active" : ""}`;
     button.type = "button";
-    const cacheMark = resourceCount
-      ? `<span class="cache-mark" title="Contents cached locally: ${resourceCount} embedded resource${resourceCount === 1 ? "" : "s"}">&#9670;</span>`
+    const cacheMark = pdfCount
+      ? `<span class="cache-mark" title="Embedded PDF/resource metadata cached locally: ${pdfCount} PDF${pdfCount === 1 ? "" : "s"}, ${resourceCount} total resource${resourceCount === 1 ? "" : "s"}">&#9670;</span>`
+      : resourceCount
+        ? `<span class="page-mark" title="Native OneNote-style page/resource metadata cached locally">&#9638;</span>`
       : "";
     button.innerHTML = `
       <div class="page-item-main">
@@ -529,9 +525,14 @@ async function loadResources(page, { refresh = false } = {}) {
 
   try {
     state.resources = await api(`/api/resources?${params}`);
+    const pdfCount = state.resources.filter(isPdfResource).length;
+    const imageCount = state.resources.filter(isImageResource).length;
     page._cache = {
       ...(page._cache || {}),
       resource_count: state.resources.filter((resource) => resource.kind !== "unavailable").length,
+      pdf_count: pdfCount,
+      image_count: imageCount,
+      native_hint: Boolean(state.resources.length && !pdfCount),
     };
     renderPages();
     renderResources();
@@ -542,20 +543,14 @@ async function loadResources(page, { refresh = false } = {}) {
 }
 
 function setViewMode(mode) {
-  if (!["pdf", "text"].includes(mode)) {
+  if (!["pdf", "text", "page"].includes(mode)) {
     mode = "pdf";
   }
   state.viewMode = mode;
   localStorage.setItem("onenote-view-mode", mode);
   viewPdfButton.classList.toggle("active", mode === "pdf");
   viewTextButton.classList.toggle("active", mode === "text");
-  renderResources();
-}
-
-function setPagePreviewMode(enabled) {
-  state.showPagePreview = enabled;
-  localStorage.setItem("onenote-show-page-preview", enabled ? "1" : "0");
-  viewPageButton.classList.toggle("active", enabled);
+  viewPageButton.classList.toggle("active", mode === "page");
   renderResources();
 }
 
@@ -574,14 +569,14 @@ function renderResources() {
   const resources = state.resources;
   viewPdfButton.classList.toggle("active", state.viewMode === "pdf");
   viewTextButton.classList.toggle("active", state.viewMode === "text");
-  viewPageButton.classList.toggle("active", state.showPagePreview);
+  viewPageButton.classList.toggle("active", state.viewMode === "page");
 
   if (!page) {
     resourcesList.textContent = "Select a page to inspect its PDF/image resources.";
     return;
   }
 
-  if (!resources.length) {
+  if (!resources.length && state.viewMode !== "page") {
     resourcesList.textContent = "No embedded resources found on this page.";
     return;
   }
@@ -606,8 +601,8 @@ function renderResources() {
     return;
   }
 
-  const pdfs = resources.filter((resource) => resource.kind === "application/pdf");
-  const images = resources.filter((resource) => resource.kind === "image-fullres" || resource.kind.startsWith("image/"));
+  const pdfs = resources.filter(isPdfResource);
+  const images = resources.filter(isImageResource);
 
   resourcesList.innerHTML = "";
   const summary = document.createElement("div");
@@ -620,11 +615,9 @@ function renderResources() {
 
   if (state.viewMode === "pdf") {
     renderPdfMode(pdfs, images);
-  } else {
+  } else if (state.viewMode === "text") {
     renderTextMode(page, pdfs, images);
-  }
-
-  if (state.showPagePreview) {
+  } else {
     renderPageMode(page, resources, pdfs, images);
   }
 }
@@ -662,49 +655,152 @@ function renderPdfMode(pdfs, images) {
 function renderPageMode(page, resources, pdfs, images) {
   const card = document.createElement("div");
   card.className = "item";
-  const previewImages = images.slice(0, 24);
-  const otherResources = resources.filter((resource) => !pdfs.includes(resource) && !images.includes(resource));
   card.innerHTML = `
     <div class="item-title"><span class="resource-kind">&#9638; page</span> OneNote page preview</div>
-    <div class="item-meta">Rough browser preview from embedded printout images and resources. This is not a full OneNote renderer yet.</div>
-    <div class="onenote-preview">
-      <div class="preview-note">
-        <strong>${escapeHtml(page.title || "Untitled page")}</strong><br>
-        ${pdfs.length} embedded PDF${pdfs.length === 1 ? "" : "s"} &middot; ${images.length} printout image${images.length === 1 ? "" : "s"} &middot; ${otherResources.length} other resource${otherResources.length === 1 ? "" : "s"}
-      </div>
-      ${
-        previewImages.length
-          ? previewImages
-              .map(
-                (image, index) => `
-                  <img
-                    class="preview-image"
-                    loading="lazy"
-                    alt="${escapeHtml(image.alt || `OneNote printout image ${index + 1}`)}"
-                    src="/api/resource?resource_url=${encodeURIComponent(image.url)}&kind=${encodeURIComponent(image.kind)}"
-                  />
-                `,
-              )
-              .join("")
-          : `<div class="preview-note">No printout images were found. Use PDF mode for embedded PDFs or Text mode for extracted PDF text.</div>`
-      }
-      ${
-        previewImages.length < images.length
-          ? `<div class="preview-note">${images.length - previewImages.length} additional image resource${images.length - previewImages.length === 1 ? "" : "s"} omitted from this preview.</div>`
-          : ""
-      }
-      ${
-        otherResources.length
-          ? `<div class="preview-resource-grid">${otherResources
-              .slice(0, 12)
-              .map((resource) => `<div class="preview-note">${escapeHtml(resource.kind || resource.tag)}<br>${escapeHtml(resource.alt || resource.url || "")}</div>`)
-              .join("")}</div>`
-          : ""
-      }
-    </div>
+    <div class="item-meta">Rendering native OneNote HTML with cached resources when available.</div>
   `;
   resourcesList.append(card);
-  loadCacheMetrics();
+  loadOneNotePageFrame(page, card, { pdfs, images, resources });
+}
+
+async function loadOneNotePageFrame(page, card, summary) {
+  const frame = document.createElement("iframe");
+  frame.className = "onenote-html-frame";
+  frame.title = "OneNote page preview";
+  frame.sandbox = "allow-same-origin allow-popups";
+  card.append(frame);
+
+  try {
+    const payload = await api(`/api/page-html?page_id=${encodeURIComponent(page.id)}`);
+    const resources = payload.resources || summary.resources || [];
+    const pdfs = resources.filter(isPdfResource);
+    const images = resources.filter(isImageResource);
+    frame.srcdoc = buildOneNotePreviewDocument(page, payload.html || "", {
+      pdfCount: pdfs.length,
+      imageCount: images.length,
+      resourceCount: resources.length,
+    });
+    page._cache = {
+      ...(page._cache || {}),
+      resource_count: resources.length,
+      pdf_count: pdfs.length,
+      image_count: images.length,
+      native_hint: Boolean(resources.length && !pdfs.length),
+    };
+    renderPages();
+    loadCacheMetrics();
+  } catch (error) {
+    frame.remove();
+    card.insertAdjacentHTML(
+      "beforeend",
+      `<div class="error">OneNote page preview failed: ${escapeHtml(error.message)}</div>`,
+    );
+  }
+}
+
+function buildOneNotePreviewDocument(page, html, counts) {
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<base target="_blank">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      linear-gradient(90deg, rgba(18, 103, 196, 0.045) 1px, transparent 1px),
+      linear-gradient(rgba(24, 32, 42, 0.035) 1px, transparent 1px),
+      #fffdf7;
+    background-size: 34px 34px;
+    color: #18202a;
+    font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+  }
+  .page-shell {
+    min-height: 100vh;
+    overflow: auto;
+    padding: 24px;
+  }
+  .page-meta {
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid #d8dee8;
+    border-radius: 6px;
+    color: #667085;
+    margin: 0 0 18px;
+    padding: 10px 12px;
+  }
+  .page-meta strong { color: #18202a; }
+  .onenote-body {
+    background: rgba(255, 255, 255, 0.74);
+    border: 1px solid rgba(216, 222, 232, 0.82);
+    border-radius: 6px;
+    min-height: 480px;
+    overflow: auto;
+    padding: 18px;
+    position: relative;
+  }
+  .onenote-body [style*="position:absolute"],
+  .onenote-body [style*="position: absolute"] {
+    max-width: calc(100% - 24px) !important;
+  }
+  .onenote-body table {
+    border-collapse: collapse;
+    max-width: 100%;
+    table-layout: auto;
+  }
+  .onenote-body td,
+  .onenote-body th {
+    max-width: 100%;
+    vertical-align: top;
+  }
+  .onenote-body img {
+    display: block;
+    height: auto !important;
+    margin: 10px auto 26px;
+    max-width: 100% !important;
+    object-fit: contain;
+  }
+  .onenote-body td > img,
+  .onenote-body th > img {
+    margin: 8px auto;
+    width: auto !important;
+  }
+  .onenote-body p,
+  .onenote-body div {
+    max-width: 100%;
+  }
+  .embedded-object {
+    align-items: center;
+    background: #f7f9fc;
+    border: 1px solid #d8dee8;
+    border-radius: 6px;
+    display: flex;
+    gap: 10px;
+    margin: 10px 0 18px;
+    padding: 10px 12px;
+  }
+  a { color: #1267c4; }
+</style>
+</head>
+<body>
+  <div class="page-shell">
+    <div class="page-meta"><strong>${escapeHtml(page.title || "Untitled page")}</strong><br>${counts.pdfCount} embedded PDF${counts.pdfCount === 1 ? "" : "s"} &middot; ${counts.imageCount} image resource${counts.imageCount === 1 ? "" : "s"} &middot; ${counts.resourceCount} total resource${counts.resourceCount === 1 ? "" : "s"}</div>
+    <div class="onenote-body">${html}</div>
+  </div>
+</body>
+</html>`;
+}
+
+function isPdfResource(resource) {
+  const kind = String(resource?.kind || "").toLowerCase();
+  const url = String(resource?.url || "").toLowerCase();
+  return kind === "application/pdf" || kind.includes("application/pdf") || url.includes(".pdf");
+}
+
+function isImageResource(resource) {
+  const kind = String(resource?.kind || "").toLowerCase();
+  return kind === "image-fullres" || kind.startsWith("image/");
 }
 
 async function loadPdfFrame(pdf, card) {
@@ -944,7 +1040,6 @@ applyCollapsedPanels();
 applyPanelDisplaySettings();
 setupSplitters();
 setViewMode(state.viewMode);
-setPagePreviewMode(state.showPagePreview);
 setPdfSearchMode(state.searchPdfContent);
 loadBasics();
 window.addEventListener("focus", maybeRefreshMetadataOnFocus);
