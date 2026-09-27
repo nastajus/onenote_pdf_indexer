@@ -1,3 +1,9 @@
+const savedViewModeVersion = localStorage.getItem("onenote-view-mode-version");
+if (savedViewModeVersion !== "any-default-v1") {
+  localStorage.setItem("onenote-view-mode", "any");
+  localStorage.setItem("onenote-view-mode-version", "any-default-v1");
+}
+
 const state = {
   notebooks: [],
   sections: [],
@@ -7,7 +13,7 @@ const state = {
   selectedPage: null,
   pages: [],
   resources: [],
-  viewMode: localStorage.getItem("onenote-view-mode") || "pdf",
+  viewMode: localStorage.getItem("onenote-view-mode") || "any",
   searchPdfContent: localStorage.getItem("onenote-search-pdf") === "1",
   showDates: localStorage.getItem("onenote-show-dates") !== "0",
   sectionSort: localStorage.getItem("onenote-section-sort") || "onenote",
@@ -29,6 +35,7 @@ const pagesList = document.querySelector("#pagesList");
 const resourcesList = document.querySelector("#resourcesList");
 const queryInput = document.querySelector("#queryInput");
 const grid = document.querySelector(".grid");
+const viewAnyButton = document.querySelector("#viewAnyButton");
 const viewPdfButton = document.querySelector("#viewPdfButton");
 const viewTextButton = document.querySelector("#viewTextButton");
 const viewPageButton = document.querySelector("#viewPageButton");
@@ -55,6 +62,10 @@ document.querySelector("#refreshButton").addEventListener("click", () => {
 
 queryInput.addEventListener("input", () => {
   handleQueryInput();
+});
+
+viewAnyButton.addEventListener("click", () => {
+  setViewMode("any");
 });
 
 viewPdfButton.addEventListener("click", () => {
@@ -702,11 +713,13 @@ async function loadResources(page, { refresh = false } = {}) {
 }
 
 function setViewMode(mode) {
-  if (!["pdf", "text", "page"].includes(mode)) {
-    mode = "pdf";
+  if (!["any", "pdf", "text", "page"].includes(mode)) {
+    mode = "any";
   }
   state.viewMode = mode;
   localStorage.setItem("onenote-view-mode", mode);
+  localStorage.setItem("onenote-view-mode-version", "any-default-v1");
+  viewAnyButton.classList.toggle("active", mode === "any");
   viewPdfButton.classList.toggle("active", mode === "pdf");
   viewTextButton.classList.toggle("active", mode === "text");
   viewPageButton.classList.toggle("active", mode === "page");
@@ -726,6 +739,7 @@ function setPdfSearchMode(enabled) {
 function renderResources() {
   const page = state.selectedPage;
   const resources = state.resources;
+  viewAnyButton.classList.toggle("active", state.viewMode === "any");
   viewPdfButton.classList.toggle("active", state.viewMode === "pdf");
   viewTextButton.classList.toggle("active", state.viewMode === "text");
   viewPageButton.classList.toggle("active", state.viewMode === "page");
@@ -735,7 +749,7 @@ function renderResources() {
     return;
   }
 
-  if (!resources.length && state.viewMode !== "page") {
+  if (!resources.length && !["any", "page"].includes(state.viewMode)) {
     resourcesList.textContent = "No embedded resources found on this page.";
     return;
   }
@@ -772,7 +786,13 @@ function renderResources() {
   `;
   resourcesList.append(summary);
 
-  if (state.viewMode === "pdf") {
+  if (state.viewMode === "any") {
+    if (pdfs.length) {
+      renderPdfMode(pdfs, images);
+    } else {
+      renderPageMode(page, resources, pdfs, images);
+    }
+  } else if (state.viewMode === "pdf") {
     renderPdfMode(pdfs, images);
   } else if (state.viewMode === "text") {
     renderTextMode(page, pdfs, images);

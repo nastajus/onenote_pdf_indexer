@@ -77,7 +77,7 @@ Other debug options:
 - `image-fullres` resources are OneNote printout images, usually rendered PDF pages. These need OCR for text extraction.
 - `application/pdf` resources are original embedded PDFs. The app extracts and caches text from those PDFs by PDF page.
 - The server reads from cache before authenticating with Graph wherever possible.
-- The bottom control dock switches between embedded PDF view, extracted text view, and OneNote page layout preview.
+- The bottom control dock defaults to **Any**, which shows an embedded PDF when available and otherwise shows the OneNote page layout preview. Dedicated PDF, Text, and Page modes are still available.
 - **Search PDF Text** toggles full cached PDF-content search. Leave it off for fast title filtering; turn it on when you want results from extracted paper text and PDF page numbers.
 - The bottom cache bar shows downloaded/discovered PDF cache progress. Its tooltip explains the current denominator and rough remaining batch time.
 - Drag the vertical handles between columns to resize the notebook, page, and PDF/text panels.

@@ -64,7 +64,11 @@
 
       <section class="control-dock" aria-label="View controls">
         <div class="control-group" role="group" aria-label="Resource view mode">
-          <button id="viewPdfButton" class="mode-button active" type="button" title="Show embedded PDF">
+          <button id="viewAnyButton" class="mode-button active" type="button" title="Show PDF when available, otherwise show the OneNote page preview">
+            <span aria-hidden="true">&#9672;</span>
+            Any
+          </button>
+          <button id="viewPdfButton" class="mode-button" type="button" title="Show embedded PDF">
             <span aria-hidden="true">&#9635;</span>
             PDF
           </button>
