@@ -10,6 +10,8 @@ const state = {
   viewMode: localStorage.getItem("onenote-view-mode") || "pdf",
   searchPdfContent: localStorage.getItem("onenote-search-pdf") === "1",
   showDates: localStorage.getItem("onenote-show-dates") !== "0",
+  sectionSort: localStorage.getItem("onenote-section-sort") || "onenote",
+  pageSort: localStorage.getItem("onenote-page-sort") || "onenote",
   panelFontStep: Number.parseInt(localStorage.getItem("onenote-panel-font-step") || "0", 10),
   isRefreshingMetadata: false,
   lastMetadataRefresh: 0,
@@ -29,6 +31,8 @@ const viewPdfButton = document.querySelector("#viewPdfButton");
 const viewTextButton = document.querySelector("#viewTextButton");
 const viewPageButton = document.querySelector("#viewPageButton");
 const searchPdfButton = document.querySelector("#searchPdfButton");
+const sectionSortSelect = document.querySelector("#sectionSortSelect");
+const pageSortSelect = document.querySelector("#pageSortSelect");
 const fontSmallerButton = document.querySelector("#fontSmallerButton");
 const fontLargerButton = document.querySelector("#fontLargerButton");
 const toggleDatesButton = document.querySelector("#toggleDatesButton");
@@ -63,6 +67,18 @@ viewPageButton.addEventListener("click", () => {
 
 searchPdfButton.addEventListener("click", () => {
   setPdfSearchMode(!state.searchPdfContent);
+});
+
+sectionSortSelect.addEventListener("change", () => {
+  state.sectionSort = sectionSortSelect.value;
+  localStorage.setItem("onenote-section-sort", state.sectionSort);
+  renderSections();
+});
+
+pageSortSelect.addEventListener("change", () => {
+  state.pageSort = pageSortSelect.value;
+  localStorage.setItem("onenote-page-sort", state.pageSort);
+  renderPages();
 });
 
 fontSmallerButton.addEventListener("click", () => {
@@ -338,10 +354,30 @@ function selectNotebook(notebookId) {
 }
 
 function filteredSections() {
+  let sections;
   if (!state.selectedNotebookId) {
-    return state.sections;
+    sections = state.sections;
+  } else {
+    sections = state.sections.filter((section) => section.parentNotebook?.id === state.selectedNotebookId);
   }
-  return state.sections.filter((section) => section.parentNotebook?.id === state.selectedNotebookId);
+  return sortSections(sections);
+}
+
+function sortSections(sections) {
+  const indexed = sections.map((section, index) => ({ section, index }));
+  indexed.sort((left, right) => {
+    switch (state.sectionSort) {
+      case "title":
+        return compareText(left.section.displayName, right.section.displayName) || left.index - right.index;
+      case "modified-desc":
+        return compareDate(right.section.lastModifiedDateTime, left.section.lastModifiedDateTime) || left.index - right.index;
+      case "modified-asc":
+        return compareDate(left.section.lastModifiedDateTime, right.section.lastModifiedDateTime) || left.index - right.index;
+      default:
+        return left.index - right.index;
+    }
+  });
+  return indexed.map((row) => row.section);
 }
 
 function renderSections() {
@@ -440,11 +476,11 @@ function renderPages() {
     return;
   }
 
-  const pages = state.pages.filter((page) => {
+  const pages = sortPages(state.pages.filter((page) => {
     const section = page._section?.displayName || "";
     const title = page.title || "";
     return `${section} ${title}`.toLowerCase().includes(query);
-  });
+  }));
 
   if (!pages.length) {
     pagesList.textContent = state.pages.length ? "No pages match this filter." : "No pages found in this section.";
@@ -474,6 +510,47 @@ function renderPages() {
     button.addEventListener("click", () => loadResources(page));
     pagesList.append(button);
   }
+}
+
+function sortPages(pages) {
+  const indexed = pages.map((page, index) => ({ page, index }));
+  indexed.sort((left, right) => {
+    switch (state.pageSort) {
+      case "title":
+        return compareText(left.page.title, right.page.title) || left.index - right.index;
+      case "modified-desc":
+        return compareDate(right.page.lastModifiedDateTime, left.page.lastModifiedDateTime) || left.index - right.index;
+      case "modified-asc":
+        return compareDate(left.page.lastModifiedDateTime, right.page.lastModifiedDateTime) || left.index - right.index;
+      case "created-desc":
+        return compareDate(right.page.createdDateTime, left.page.createdDateTime) || left.index - right.index;
+      case "created-asc":
+        return compareDate(left.page.createdDateTime, right.page.createdDateTime) || left.index - right.index;
+      case "pdf-first":
+        return comparePdfCache(right.page, left.page) || left.index - right.index;
+      default:
+        return left.index - right.index;
+    }
+  });
+  return indexed.map((row) => row.page);
+}
+
+function compareText(left, right) {
+  return String(left || "").localeCompare(String(right || ""), undefined, { sensitivity: "base", numeric: true });
+}
+
+function compareDate(left, right) {
+  const leftTime = Date.parse(left || "");
+  const rightTime = Date.parse(right || "");
+  return (Number.isFinite(leftTime) ? leftTime : 0) - (Number.isFinite(rightTime) ? rightTime : 0);
+}
+
+function comparePdfCache(left, right) {
+  const leftPdf = Number(left._cache?.pdf_count || 0);
+  const rightPdf = Number(right._cache?.pdf_count || 0);
+  const leftResources = Number(left._cache?.resource_count || 0);
+  const rightResources = Number(right._cache?.resource_count || 0);
+  return leftPdf - rightPdf || leftResources - rightResources;
 }
 
 function updatePagesHeader() {
@@ -755,14 +832,22 @@ function buildOneNotePreviewDocument(page, html, counts) {
     vertical-align: top;
   }
   .onenote-body img {
+    background: #ffffff;
+  }
+  .onenote-body img.onenote-inline-image {
     display: block;
     height: auto !important;
     margin: 10px auto 26px;
     max-width: 100% !important;
     object-fit: contain;
   }
-  .onenote-body td > img,
-  .onenote-body th > img {
+  .onenote-body img.onenote-abs-image {
+    display: block;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+  .onenote-body td > img.onenote-inline-image,
+  .onenote-body th > img.onenote-inline-image {
     margin: 8px auto;
     width: auto !important;
   }
@@ -779,6 +864,10 @@ function buildOneNotePreviewDocument(page, html, counts) {
     gap: 10px;
     margin: 10px 0 18px;
     padding: 10px 12px;
+  }
+  .onenote-page-spacer {
+    pointer-events: none;
+    width: 1px;
   }
   a { color: #1267c4; }
 </style>
@@ -1038,6 +1127,8 @@ function formatBytes(bytes) {
 applyLayout();
 applyCollapsedPanels();
 applyPanelDisplaySettings();
+sectionSortSelect.value = state.sectionSort;
+pageSortSelect.value = state.pageSort;
 setupSplitters();
 setViewMode(state.viewMode);
 setPdfSearchMode(state.searchPdfContent);

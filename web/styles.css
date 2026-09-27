@@ -71,6 +71,15 @@ input {
   padding: 10px 12px;
 }
 
+select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--text);
+  font: inherit;
+  padding: 8px 28px 8px 10px;
+}
+
 .app-shell {
   width: min(1500px, calc(100vw - 32px));
   margin: 0 auto;
@@ -149,6 +158,14 @@ input {
 .control-group {
   align-items: center;
   display: inline-flex;
+  gap: 6px;
+}
+
+.select-control {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12px;
   gap: 6px;
 }
 

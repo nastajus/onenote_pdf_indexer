@@ -87,6 +87,27 @@
           </div>
         </div>
         <div class="control-group">
+          <label class="select-control" title="Sort sections in the library panel">
+            <span>Sections</span>
+            <select id="sectionSortSelect">
+              <option value="onenote">OneNote order</option>
+              <option value="title">Title A-Z</option>
+              <option value="modified-desc">Modified newest</option>
+              <option value="modified-asc">Modified oldest</option>
+            </select>
+          </label>
+          <label class="select-control" title="Sort pages in the selected section">
+            <span>Pages</span>
+            <select id="pageSortSelect">
+              <option value="onenote">OneNote order</option>
+              <option value="title">Title A-Z</option>
+              <option value="modified-desc">Modified newest</option>
+              <option value="modified-asc">Modified oldest</option>
+              <option value="created-desc">Created newest</option>
+              <option value="created-asc">Created oldest</option>
+              <option value="pdf-first">PDF/cache first</option>
+            </select>
+          </label>
           <button
             id="searchPdfButton"
             class="mode-button"

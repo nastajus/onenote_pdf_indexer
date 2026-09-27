@@ -87,7 +87,7 @@ def _init(db: sqlite3.Connection) -> None:
 
 
 def get_collection(db: sqlite3.Connection, table: str) -> list[dict[str, Any]]:
-    rows = db.execute(f"select data from {table} order by json_extract(data, '$.displayName'), json_extract(data, '$.title')").fetchall()
+    rows = db.execute(f"select data from {table} order by rowid").fetchall()
     return [json.loads(row["data"]) for row in rows]
 
 
@@ -102,7 +102,7 @@ def replace_collection(db: sqlite3.Connection, table: str, items: list[dict[str,
 
 def get_pages(db: sqlite3.Connection, section_id: str) -> list[dict[str, Any]]:
     rows = db.execute(
-        "select data from pages where section_id = ? order by json_extract(data, '$.title')",
+        "select data from pages where section_id = ? order by rowid",
         (section_id,),
     ).fetchall()
     return [json.loads(row["data"]) for row in rows]

@@ -83,11 +83,14 @@ Other debug options:
 - Drag the vertical handles between columns to resize the notebook, page, and PDF/text panels.
 - Use each panel arrow to collapse/restore a panel when you want to maximize the PDF area.
 - Use **Reset Layout** to restore the default column layout and reopen collapsed panels.
+- The bottom sort controls can preserve the OneNote/Graph order or sort sections/pages by title, date, or PDF/cache status.
 - A diamond marker on a page means embedded resources for that page are cached locally.
+- Page preview hides original embedded PDF objects and renders OneNote printout images as one scrollable page surface when Graph exposes them.
 - Stale OneNote/Graph resource `404` responses are handled gracefully; cached resources are used first, missing refreshed resources are pruned, and page-content failures retry alternate cached Graph URLs before showing diagnostics.
 
 Use **Refresh** to force a fresh Graph fetch for notebooks, sections, and the selected section. OneNote/Graph can still take a short while to reflect newly created or deleted notebooks after OneDrive/OneNote sync.
 Use **Refresh Selected** to refresh the selected page/section and prune cached resource data for resources that no longer match the OneNote page.
+OneNote desktop sync errors are not exposed directly by Microsoft Graph. The app can detect cloud-side symptoms such as missing pages/resources, stale `404` resources, or changed counts after refresh, but the authoritative sync-error list still lives in OneNote desktop.
 
 ## Warm The Cache
 
