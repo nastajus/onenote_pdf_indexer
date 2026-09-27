@@ -112,6 +112,14 @@ def get_resources(db: sqlite3.Connection, page_id: str) -> list[dict[str, Any]]:
     return [json.loads(row["data"]) for row in rows]
 
 
+def resource_count(db: sqlite3.Connection, page_id: str) -> int:
+    row = db.execute(
+        "select count(*) as count from resources where page_id = ?",
+        (page_id,),
+    ).fetchone()
+    return int(row["count"] if row else 0)
+
+
 def replace_resources(db: sqlite3.Connection, page_id: str, resources: list[dict[str, Any]]) -> None:
     with db:
         db.execute("delete from resources where page_id = ?", (page_id,))
@@ -185,3 +193,10 @@ def delete_missing_resource_data(db: sqlite3.Connection, page_id: str, valid_url
         for url in stale_urls:
             db.execute("delete from resource_blobs where url = ?", (url,))
             db.execute("delete from pdf_text where resource_url = ?", (url,))
+
+
+def delete_resource_url(db: sqlite3.Connection, url: str) -> None:
+    with db:
+        db.execute("delete from resource_blobs where url = ?", (url,))
+        db.execute("delete from pdf_text where resource_url = ?", (url,))
+        db.execute("delete from resources where url = ?", (url,))

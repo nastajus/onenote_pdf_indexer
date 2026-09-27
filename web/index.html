@@ -28,10 +28,14 @@
           <div id="sectionsList" class="list">Loading...</div>
         </aside>
 
+        <div class="splitter" data-splitter="left" role="separator" aria-orientation="vertical" title="Drag to resize panels"></div>
+
         <section class="panel">
           <h2>Pages</h2>
           <div id="pagesList" class="list">Select a section to load its pages.</div>
         </section>
+
+        <div class="splitter" data-splitter="right" role="separator" aria-orientation="vertical" title="Drag to resize panels"></div>
 
         <section class="panel">
           <h2>Embedded Resources</h2>
@@ -42,15 +46,18 @@
       <section class="control-dock" aria-label="View controls">
         <div class="control-group" role="group" aria-label="Resource view mode">
           <button id="viewPdfButton" class="mode-button active" type="button" title="Show embedded PDF">
-            <span aria-hidden="true">▣</span>
+            <span aria-hidden="true">&#9635;</span>
             PDF
           </button>
           <button id="viewTextButton" class="mode-button" type="button" title="Show extracted text">
-            <span aria-hidden="true">◇</span>
+            <span aria-hidden="true">&#9671;</span>
             Text
           </button>
         </div>
-        <button id="refreshSelectedButton" class="secondary-button" type="button">Refresh Selected</button>
+        <div class="control-group">
+          <button id="resetLayoutButton" class="secondary-button" type="button">Reset Layout</button>
+          <button id="refreshSelectedButton" class="secondary-button" type="button">Refresh Selected</button>
+        </div>
       </section>
     </main>
 

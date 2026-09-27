@@ -79,6 +79,10 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
                     for page in pages:
                         page["_section"] = section
                     cache.replace_pages(db, section_id, pages)
+                for page in pages:
+                    page["_cache"] = {
+                        "resource_count": cache.resource_count(db, page["id"]),
+                    }
                 self._send_json(pages)
                 return
 
@@ -90,13 +94,62 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
                 resources = cache.get_resources(db, page_id)
                 if force or not resources:
                     old_urls = {resource.get("url", "") for resource in resources}
-                    resources = [resource.__dict__ for resource in extract_resources(get_graph().page_content(page_id))]
+                    try:
+                        resources = [resource.__dict__ for resource in extract_resources(get_graph().page_content(page_id))]
+                    except RuntimeError as exc:
+                        if resources:
+                            self._send_json(resources)
+                            return
+                        if _is_graph_not_found(exc):
+                            self._send_json(
+                                [
+                                    {
+                                        "tag": "status",
+                                        "kind": "unavailable",
+                                        "url": "",
+                                        "message": "OneNote did not return this page's resources. It may still be syncing, moved, or stale in Graph.",
+                                    }
+                                ]
+                            )
+                            return
+                        raise
                     new_urls = {resource.get("url", "") for resource in resources}
                     cache.delete_missing_resource_data(db, page_id, new_urls)
                     cache.replace_resources(db, page_id, resources)
-                    for stale_url in old_urls - new_urls:
-                        cache.delete_missing_resource_data(db, page_id, new_urls | {stale_url})
                 self._send_json(resources)
+                return
+
+            if path == "/api/resource-info":
+                resource_url = query.get("resource_url", [""])[0]
+                if not resource_url:
+                    self._send_json({"error": "Missing resource_url"}, status=400)
+                    return
+
+                blob = cache.get_resource_blob(db, resource_url)
+                if force or not blob:
+                    try:
+                        body = get_graph().get_bytes(resource_url)
+                    except RuntimeError as exc:
+                        if _is_graph_not_found(exc):
+                            cache.delete_resource_url(db, resource_url)
+                            self._send_json(
+                                {
+                                    "available": False,
+                                    "message": "OneNote no longer exposes this embedded resource. Removed stale cached references.",
+                                }
+                            )
+                            return
+                        raise
+                    content_type = _content_type_for_resource(resource_url, query)
+                    blob = cache.put_resource_blob(db, resource_url, body, content_type)
+                self._send_json(
+                    {
+                        "available": True,
+                        "content_type": blob.get("content_type"),
+                        "size": blob["size"],
+                        "sha256": blob["sha256"],
+                    }
+                )
                 return
 
             if path == "/api/resource":
@@ -107,7 +160,14 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
 
                 blob = cache.get_resource_blob(db, resource_url)
                 if force or not blob:
-                    body = get_graph().get_bytes(resource_url)
+                    try:
+                        body = get_graph().get_bytes(resource_url)
+                    except RuntimeError as exc:
+                        if _is_graph_not_found(exc):
+                            cache.delete_resource_url(db, resource_url)
+                            self._send_json({"error": "OneNote no longer exposes this embedded resource."}, status=404)
+                            return
+                        raise
                     content_type = _content_type_for_resource(resource_url, query)
                     blob = cache.put_resource_blob(db, resource_url, body, content_type)
                 self._send_bytes(
@@ -131,7 +191,17 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
                 if force or not text:
                     blob = cache.get_resource_blob(db, resource_url)
                     if force or not blob:
-                        body = get_graph().get_bytes(resource_url)
+                        try:
+                            body = get_graph().get_bytes(resource_url)
+                        except RuntimeError as exc:
+                            if _is_graph_not_found(exc):
+                                cache.delete_resource_url(db, resource_url)
+                                self._send_json(
+                                    {"error": "OneNote no longer exposes this embedded PDF. Removed stale cached references."},
+                                    status=404,
+                                )
+                                return
+                            raise
                         blob = cache.put_resource_blob(db, resource_url, body, "application/pdf")
                     text = extract_pdf_text(blob["body"])
                     cache.put_pdf_text(db, page_id, resource_url, text)
@@ -212,6 +282,10 @@ def _content_type_for_resource(resource_url: str, query: dict[str, list[str]]) -
     if "application/pdf" in kind:
         return "application/pdf"
     return "application/octet-stream"
+
+
+def _is_graph_not_found(exc: RuntimeError) -> bool:
+    return "HTTP 404" in str(exc) or "'code': '20102'" in str(exc) or '"code": "20102"' in str(exc)
 
 
 def main() -> None:

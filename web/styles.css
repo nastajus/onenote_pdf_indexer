@@ -8,6 +8,9 @@
   --accent: #1267c4;
   --accent-dark: #0b4f9c;
   --error: #9b1c1c;
+  --left-col: 0.8fr;
+  --middle-col: 1.4fr;
+  --right-col: 1fr;
 }
 
 * {
@@ -80,9 +83,35 @@ input {
 
 .grid {
   display: grid;
-  grid-template-columns: minmax(250px, 0.8fr) minmax(380px, 1.4fr) minmax(320px, 1fr);
-  gap: 16px;
+  grid-template-columns:
+    minmax(220px, var(--left-col))
+    10px
+    minmax(300px, var(--middle-col))
+    10px
+    minmax(320px, var(--right-col));
+  gap: 8px;
   align-items: start;
+}
+
+.splitter {
+  align-self: stretch;
+  min-height: 280px;
+  border-radius: 999px;
+  cursor: col-resize;
+  position: relative;
+}
+
+.splitter::before {
+  background: var(--line);
+  border-radius: 999px;
+  content: "";
+  inset: 16px 4px;
+  position: absolute;
+}
+
+.splitter:hover::before,
+.splitter.active::before {
+  background: var(--accent);
 }
 
 .control-dock {
@@ -149,6 +178,27 @@ input {
   color: var(--text);
   padding: 10px;
   text-align: left;
+}
+
+.page-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.page-item-main {
+  min-width: 0;
+}
+
+.cache-mark {
+  align-items: center;
+  border: 1px solid #98a2b3;
+  border-radius: 999px;
+  color: #344054;
+  display: inline-flex;
+  font-size: 13px;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
 }
 
 button.item {
@@ -227,6 +277,10 @@ button.item.active {
 @media (max-width: 1000px) {
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .splitter {
+    display: none;
   }
 }
 

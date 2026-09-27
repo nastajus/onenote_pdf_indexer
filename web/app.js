@@ -13,9 +13,12 @@ const sectionsList = document.querySelector("#sectionsList");
 const pagesList = document.querySelector("#pagesList");
 const resourcesList = document.querySelector("#resourcesList");
 const queryInput = document.querySelector("#queryInput");
+const grid = document.querySelector(".grid");
 const viewPdfButton = document.querySelector("#viewPdfButton");
 const viewTextButton = document.querySelector("#viewTextButton");
 const refreshSelectedButton = document.querySelector("#refreshSelectedButton");
+const resetLayoutButton = document.querySelector("#resetLayoutButton");
+const splitters = document.querySelectorAll(".splitter");
 
 document.querySelector("#refreshButton").addEventListener("click", () => {
   loadBasics({ refresh: true });
@@ -41,6 +44,10 @@ refreshSelectedButton.addEventListener("click", () => {
   } else {
     loadBasics({ refresh: true });
   }
+});
+
+resetLayoutButton.addEventListener("click", () => {
+  resetLayout();
 });
 
 async function api(path) {
@@ -191,11 +198,18 @@ function renderPages() {
   pagesList.innerHTML = "";
   for (const page of pages) {
     const button = document.createElement("button");
-    button.className = "item";
+    const resourceCount = page._cache?.resource_count || 0;
+    button.className = "item page-item";
     button.type = "button";
+    const cacheMark = resourceCount
+      ? `<span class="cache-mark" title="Contents cached locally: ${resourceCount} embedded resource${resourceCount === 1 ? "" : "s"}">&#9670;</span>`
+      : "";
     button.innerHTML = `
-      <div class="item-title">${escapeHtml(page.title || "Untitled page")}</div>
-      <div class="item-meta">${escapeHtml(page.lastModifiedDateTime || page.id)}</div>
+      <div class="page-item-main">
+        <div class="item-title">${escapeHtml(page.title || "Untitled page")}</div>
+        <div class="item-meta">${escapeHtml(page.lastModifiedDateTime || page.id)}</div>
+      </div>
+      ${cacheMark}
     `;
     button.addEventListener("click", () => loadResources(page));
     pagesList.append(button);
@@ -214,6 +228,11 @@ async function loadResources(page, { refresh = false } = {}) {
 
   try {
     state.resources = await api(`/api/resources?${params}`);
+    page._cache = {
+      ...(page._cache || {}),
+      resource_count: state.resources.filter((resource) => resource.kind !== "unavailable").length,
+    };
+    renderPages();
     renderResources();
   } catch (error) {
     renderError(resourcesList, error);
@@ -244,6 +263,17 @@ function renderResources() {
     return;
   }
 
+  const unavailable = resources.find((resource) => resource.kind === "unavailable");
+  if (unavailable) {
+    resourcesList.innerHTML = `
+      <div class="item">
+        <div class="item-title">Resource unavailable</div>
+        <div class="item-meta">${escapeHtml(unavailable.message || "OneNote did not return resources for this page.")}</div>
+      </div>
+    `;
+    return;
+  }
+
   const pdfs = resources.filter((resource) => resource.kind === "application/pdf");
   const images = resources.filter((resource) => resource.kind === "image-fullres" || resource.kind.startsWith("image/"));
 
@@ -266,11 +296,14 @@ function renderResources() {
 function renderPdfMode(pdfs, images) {
   if (pdfs.length) {
     const pdf = pdfs[0];
-    const iframe = document.createElement("iframe");
-    iframe.className = "pdf-frame";
-    iframe.title = "Embedded PDF";
-    iframe.src = `/api/resource?resource_url=${encodeURIComponent(pdf.url)}&kind=${encodeURIComponent(pdf.kind)}`;
-    resourcesList.append(iframe);
+    const card = document.createElement("div");
+    card.className = "item";
+    card.innerHTML = `
+      <div class="item-title"><span class="resource-kind">&#9635; PDF</span> Embedded PDF</div>
+      <div class="item-meta">Checking local cache...</div>
+    `;
+    resourcesList.append(card);
+    loadPdfFrame(pdf, card);
 
     if (pdfs.length > 1) {
       const note = document.createElement("div");
@@ -290,13 +323,41 @@ function renderPdfMode(pdfs, images) {
   resourcesList.append(card);
 }
 
+async function loadPdfFrame(pdf, card) {
+  try {
+    const info = await api(`/api/resource-info?resource_url=${encodeURIComponent(pdf.url)}&kind=${encodeURIComponent(pdf.kind)}`);
+    if (!info.available) {
+      card.innerHTML = `
+        <div class="item-title">PDF unavailable</div>
+        <div class="item-meta">${escapeHtml(info.message || "OneNote no longer exposes this embedded PDF.")}</div>
+      `;
+      return;
+    }
+
+    card.innerHTML = `
+      <div class="item-title"><span class="resource-kind">&#9635; PDF</span> Embedded PDF</div>
+      <div class="item-meta">Cached locally &middot; ${Math.round((info.size || 0) / 1024).toLocaleString()} KB &middot; ${escapeHtml((info.sha256 || "").slice(0, 12))}</div>
+    `;
+    const iframe = document.createElement("iframe");
+    iframe.className = "pdf-frame";
+    iframe.title = "Embedded PDF";
+    iframe.src = `/api/resource?resource_url=${encodeURIComponent(pdf.url)}&kind=${encodeURIComponent(pdf.kind)}`;
+    card.append(iframe);
+  } catch (error) {
+    card.innerHTML = `
+      <div class="item-title">PDF unavailable</div>
+      <div class="item-meta">${escapeHtml(error.message)}</div>
+    `;
+  }
+}
+
 function renderTextMode(page, pdfs, images) {
   if (pdfs.length) {
     for (const pdf of pdfs) {
       const card = document.createElement("div");
       card.className = "item";
       card.innerHTML = `
-        <div class="item-title"><span class="resource-kind">◇ text</span> Extracted PDF text</div>
+        <div class="item-title"><span class="resource-kind">&#9671; text</span> Extracted PDF text</div>
         <div class="item-meta">Loaded from cache when available; otherwise extracted once from the embedded PDF.</div>
       `;
       resourcesList.append(card);
@@ -308,7 +369,7 @@ function renderTextMode(page, pdfs, images) {
   const card = document.createElement("div");
   card.className = "item";
   card.innerHTML = `
-    <div class="item-title"><span class="resource-kind">◇ OCR</span> Printout text</div>
+    <div class="item-title"><span class="resource-kind">&#9671; OCR</span> Printout text</div>
     <div class="item-meta">${images.length} printout image${images.length === 1 ? "" : "s"} found. Image OCR is not installed yet, so there is no text cache for these images.</div>
   `;
   resourcesList.append(card);
@@ -333,5 +394,77 @@ async function loadPdfText(page, resource, card) {
   }
 }
 
+function applyLayout(layout) {
+  const current = layout || JSON.parse(localStorage.getItem("onenote-layout") || "null");
+  if (!current) {
+    return;
+  }
+
+  document.documentElement.style.setProperty("--left-col", `${current.left}fr`);
+  document.documentElement.style.setProperty("--middle-col", `${current.middle}fr`);
+  document.documentElement.style.setProperty("--right-col", `${current.right}fr`);
+}
+
+function resetLayout() {
+  localStorage.removeItem("onenote-layout");
+  document.documentElement.style.removeProperty("--left-col");
+  document.documentElement.style.removeProperty("--middle-col");
+  document.documentElement.style.removeProperty("--right-col");
+}
+
+function readLayout() {
+  const styles = getComputedStyle(document.documentElement);
+  return {
+    left: Number.parseFloat(styles.getPropertyValue("--left-col")) || 0.8,
+    middle: Number.parseFloat(styles.getPropertyValue("--middle-col")) || 1.4,
+    right: Number.parseFloat(styles.getPropertyValue("--right-col")) || 1,
+  };
+}
+
+function saveLayout(layout) {
+  localStorage.setItem("onenote-layout", JSON.stringify(layout));
+  applyLayout(layout);
+}
+
+function setupSplitters() {
+  for (const splitter of splitters) {
+    splitter.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      splitter.classList.add("active");
+      splitter.setPointerCapture(event.pointerId);
+
+      const startX = event.clientX;
+      const start = readLayout();
+      const gridWidth = grid.getBoundingClientRect().width;
+
+      const move = (moveEvent) => {
+        const delta = ((moveEvent.clientX - startX) / gridWidth) * 3.2;
+        const next = { ...start };
+        if (splitter.dataset.splitter === "left") {
+          next.left = Math.max(0.45, start.left + delta);
+          next.middle = Math.max(0.55, start.middle - delta);
+        } else {
+          next.middle = Math.max(0.55, start.middle + delta);
+          next.right = Math.max(0.55, start.right - delta);
+        }
+        saveLayout(next);
+      };
+
+      const up = () => {
+        splitter.classList.remove("active");
+        splitter.removeEventListener("pointermove", move);
+        splitter.removeEventListener("pointerup", up);
+        splitter.removeEventListener("pointercancel", up);
+      };
+
+      splitter.addEventListener("pointermove", move);
+      splitter.addEventListener("pointerup", up);
+      splitter.addEventListener("pointercancel", up);
+    });
+  }
+}
+
+applyLayout();
+setupSplitters();
 setViewMode(state.viewMode);
 loadBasics();

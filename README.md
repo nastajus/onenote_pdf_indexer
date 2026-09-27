@@ -76,6 +76,10 @@ Other debug options:
 - `application/pdf` resources are original embedded PDFs. The app extracts and caches text from those PDFs by PDF page.
 - The server reads from cache before authenticating with Graph wherever possible.
 - The bottom control dock switches between embedded PDF view (`▣ PDF`) and extracted text view (`◇ Text`).
+- Drag the vertical handles between columns to resize the notebook, page, and PDF/text panels.
+- Use **Reset Layout** to restore the default column layout.
+- A diamond marker on a page means embedded resources for that page are cached locally.
+- Stale OneNote/Graph resource `404` responses are handled gracefully; cached resources are used first, and missing refreshed resources are pruned.
 
 Use **Refresh** to force a fresh Graph fetch for notebooks, sections, and the selected section.
 Use **Refresh Selected** to refresh the selected page/section and prune cached resource data for resources that no longer match the OneNote page.
