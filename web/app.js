@@ -1,11 +1,16 @@
 const state = {
+  notebooks: [],
   sections: [],
-  selectedSectionId: null,
+  selectedNotebookId: localStorage.getItem("onenote-selected-notebook-id"),
+  selectedSectionId: localStorage.getItem("onenote-selected-section-id"),
+  selectedPageId: localStorage.getItem("onenote-selected-page-id"),
   selectedPage: null,
   pages: [],
   resources: [],
   viewMode: localStorage.getItem("onenote-view-mode") || "pdf",
   searchPdfContent: localStorage.getItem("onenote-search-pdf") === "1",
+  showDates: localStorage.getItem("onenote-show-dates") !== "0",
+  panelFontStep: Number.parseInt(localStorage.getItem("onenote-panel-font-step") || "0", 10),
   searchResults: [],
   searchTimer: null,
   collapsedPanels: JSON.parse(localStorage.getItem("onenote-collapsed-panels") || "{}"),
@@ -20,7 +25,11 @@ const queryInput = document.querySelector("#queryInput");
 const grid = document.querySelector(".grid");
 const viewPdfButton = document.querySelector("#viewPdfButton");
 const viewTextButton = document.querySelector("#viewTextButton");
+const viewPageButton = document.querySelector("#viewPageButton");
 const searchPdfButton = document.querySelector("#searchPdfButton");
+const fontSmallerButton = document.querySelector("#fontSmallerButton");
+const fontLargerButton = document.querySelector("#fontLargerButton");
+const toggleDatesButton = document.querySelector("#toggleDatesButton");
 const refreshSelectedButton = document.querySelector("#refreshSelectedButton");
 const resetLayoutButton = document.querySelector("#resetLayoutButton");
 const splitters = document.querySelectorAll(".splitter");
@@ -46,8 +55,24 @@ viewTextButton.addEventListener("click", () => {
   setViewMode("text");
 });
 
+viewPageButton.addEventListener("click", () => {
+  setViewMode("page");
+});
+
 searchPdfButton.addEventListener("click", () => {
   setPdfSearchMode(!state.searchPdfContent);
+});
+
+fontSmallerButton.addEventListener("click", () => {
+  setPanelFontStep(state.panelFontStep - 1);
+});
+
+fontLargerButton.addEventListener("click", () => {
+  setPanelFontStep(state.panelFontStep + 1);
+});
+
+toggleDatesButton.addEventListener("click", () => {
+  setShowDates(!state.showDates);
 });
 
 refreshSelectedButton.addEventListener("click", () => {
@@ -128,21 +153,23 @@ async function loadBasics({ refresh = false } = {}) {
   }
 
   try {
-    const notebooks = await api(`/api/notebooks${refreshParam}`);
-    renderItems(notebooksList, notebooks, {
-      emptyText: "No notebooks found.",
-      title: (item) => item.displayName,
-      meta: (item) => item.lastModifiedDateTime || item.id,
-    });
+    state.notebooks = await api(`/api/notebooks${refreshParam}`);
+    if (!state.selectedNotebookId && state.notebooks.length) {
+      const primary = state.notebooks.find((notebook) => notebook.displayName === "Samira") || state.notebooks[0];
+      state.selectedNotebookId = primary.id;
+      localStorage.setItem("onenote-selected-notebook-id", primary.id);
+    }
+    renderNotebooks();
   } catch (error) {
     renderError(notebooksList, error);
   }
 
   try {
     state.sections = await api(`/api/sections${refreshParam}`);
+    renderNotebooks();
     renderSections();
 
-    const selectedStillExists = state.sections.some((section) => section.id === state.selectedSectionId);
+    const selectedStillExists = filteredSections().some((section) => section.id === state.selectedSectionId);
     if (!selectedStillExists) {
       selectFirstSectionWithPages({ refresh });
     } else if (state.selectedSectionId) {
@@ -156,7 +183,7 @@ async function loadBasics({ refresh = false } = {}) {
 }
 
 async function selectFirstSectionWithPages({ refresh = false } = {}) {
-  for (const section of state.sections) {
+  for (const section of filteredSections()) {
     await selectSection(section.id, { refresh });
     if (state.pages.length) {
       return;
@@ -164,28 +191,79 @@ async function selectFirstSectionWithPages({ refresh = false } = {}) {
   }
 }
 
+function renderNotebooks() {
+  if (!state.notebooks.length) {
+    notebooksList.textContent = "No notebooks found.";
+    return;
+  }
+
+  notebooksList.innerHTML = "";
+  for (const notebook of state.notebooks) {
+    const sectionCount = state.sections.filter((section) => section.parentNotebook?.id === notebook.id).length;
+    const button = document.createElement("button");
+    button.className = `item${notebook.id === state.selectedNotebookId ? " active" : ""}`;
+    button.type = "button";
+    button.innerHTML = `
+      <div class="item-title">${escapeHtml(notebook.displayName || "Untitled notebook")}</div>
+      <div class="item-meta"><span>${sectionCount} section${sectionCount === 1 ? "" : "s"}</span><span class="date-meta"> &middot; ${escapeHtml(notebook.lastModifiedDateTime || notebook.id)}</span></div>
+    `;
+    button.addEventListener("click", () => selectNotebook(notebook.id));
+    notebooksList.append(button);
+  }
+}
+
+function selectNotebook(notebookId) {
+  state.selectedNotebookId = notebookId;
+  localStorage.setItem("onenote-selected-notebook-id", notebookId);
+  state.selectedSectionId = null;
+  state.selectedPageId = null;
+  state.selectedPage = null;
+  state.pages = [];
+  state.resources = [];
+  localStorage.removeItem("onenote-selected-section-id");
+  localStorage.removeItem("onenote-selected-page-id");
+  pagesList.textContent = "Select a section to load its pages.";
+  resourcesList.textContent = "Select a page to inspect its PDF/image resources.";
+  renderNotebooks();
+  renderSections();
+  selectFirstSectionWithPages();
+}
+
+function filteredSections() {
+  if (!state.selectedNotebookId) {
+    return state.sections;
+  }
+  return state.sections.filter((section) => section.parentNotebook?.id === state.selectedNotebookId);
+}
+
 function renderSections() {
-  if (!state.sections.length) {
+  const sections = filteredSections();
+  if (!sections.length) {
     sectionsList.textContent = "No sections found.";
     return;
   }
 
   sectionsList.innerHTML = "";
-  for (const section of state.sections) {
+  for (const section of sections) {
     const button = document.createElement("button");
     button.className = `item${section.id === state.selectedSectionId ? " active" : ""}`;
     button.type = "button";
     button.innerHTML = `
       <div class="item-title">${escapeHtml(section.displayName || "Untitled section")}</div>
-      <div class="item-meta">${escapeHtml(section.lastModifiedDateTime || section.id)}</div>
+      <div class="item-meta"><span class="date-meta">${escapeHtml(section.lastModifiedDateTime || section.id)}</span></div>
     `;
-    button.addEventListener("click", () => selectSection(section.id));
+    button.addEventListener("click", () => {
+      state.selectedPageId = null;
+      localStorage.removeItem("onenote-selected-page-id");
+      selectSection(section.id);
+    });
     sectionsList.append(button);
   }
 }
 
 async function selectSection(sectionId, { refresh = false } = {}) {
   state.selectedSectionId = sectionId;
+  localStorage.setItem("onenote-selected-section-id", sectionId);
   state.selectedPage = null;
   state.pages = [];
   state.resources = [];
@@ -201,6 +279,12 @@ async function selectSection(sectionId, { refresh = false } = {}) {
   try {
     state.pages = await api(`/api/pages?${params}`);
     handleQueryInput();
+    const restoredPage = state.selectedPageId
+      ? state.pages.find((page) => page.id === state.selectedPageId)
+      : null;
+    if (restoredPage) {
+      loadResources(restoredPage);
+    }
   } catch (error) {
     renderError(pagesList, error);
   }
@@ -242,6 +326,7 @@ async function loadPdfSearch(query) {
 
 function renderPages() {
   const query = queryInput.value.trim().toLowerCase();
+  updatePagesHeader();
   if (state.searchPdfContent && query.length >= 2) {
     renderPdfSearchResults();
     return;
@@ -262,7 +347,7 @@ function renderPages() {
   for (const page of pages) {
     const button = document.createElement("button");
     const resourceCount = page._cache?.resource_count || 0;
-    button.className = "item page-item";
+    button.className = `item page-item${page.id === state.selectedPage?.id ? " active" : ""}`;
     button.type = "button";
     const cacheMark = resourceCount
       ? `<span class="cache-mark" title="Contents cached locally: ${resourceCount} embedded resource${resourceCount === 1 ? "" : "s"}">&#9670;</span>`
@@ -270,13 +355,22 @@ function renderPages() {
     button.innerHTML = `
       <div class="page-item-main">
         <div class="item-title">${escapeHtml(page.title || "Untitled page")}</div>
-        <div class="item-meta">${escapeHtml(page.lastModifiedDateTime || page.id)}</div>
+        <div class="item-meta"><span class="date-meta">${escapeHtml(page.lastModifiedDateTime || page.id)}</span></div>
       </div>
       ${cacheMark}
     `;
     button.addEventListener("click", () => loadResources(page));
     pagesList.append(button);
   }
+}
+
+function updatePagesHeader() {
+  const heading = document.querySelector('[data-panel="middle"] h2');
+  if (!heading) {
+    return;
+  }
+  const count = state.pages.length;
+  heading.innerHTML = `Pages <span class="list-count">${count.toLocaleString()}</span>`;
 }
 
 function renderPdfSearchResults() {
@@ -290,12 +384,12 @@ function renderPdfSearchResults() {
   for (const result of state.searchResults) {
     const page = result.page || {};
     const button = document.createElement("button");
-    button.className = "item page-item search-hit";
+    button.className = `item page-item search-hit${page.id === state.selectedPage?.id ? " active" : ""}`;
     button.type = "button";
     button.innerHTML = `
       <div class="page-item-main">
         <div class="item-title">${escapeHtml(page.title || "Untitled page")}</div>
-        <div class="item-meta">PDF page ${escapeHtml(result.pdf_page_number || "?")} &middot; ${escapeHtml(page.lastModifiedDateTime || result.page_id)}</div>
+        <div class="item-meta">PDF page ${escapeHtml(result.pdf_page_number || "?")}<span class="date-meta"> &middot; ${escapeHtml(page.lastModifiedDateTime || result.page_id)}</span></div>
         <div class="search-hit-snippet">${escapeHtml(result.snippet || "")}</div>
       </div>
       <span class="cache-mark" title="Matched cached extracted PDF text">&#9671;</span>
@@ -307,6 +401,8 @@ function renderPdfSearchResults() {
 
 async function loadResources(page, { refresh = false } = {}) {
   state.selectedPage = page;
+  state.selectedPageId = page.id;
+  localStorage.setItem("onenote-selected-page-id", page.id);
   state.resources = [];
   resourcesList.textContent = `Inspecting ${page.title || "page"}...`;
 
@@ -334,6 +430,7 @@ function setViewMode(mode) {
   localStorage.setItem("onenote-view-mode", mode);
   viewPdfButton.classList.toggle("active", mode === "pdf");
   viewTextButton.classList.toggle("active", mode === "text");
+  viewPageButton.classList.toggle("active", mode === "page");
   renderResources();
 }
 
@@ -352,6 +449,7 @@ function renderResources() {
   const resources = state.resources;
   viewPdfButton.classList.toggle("active", state.viewMode === "pdf");
   viewTextButton.classList.toggle("active", state.viewMode === "text");
+  viewPageButton.classList.toggle("active", state.viewMode === "page");
 
   if (!page) {
     resourcesList.textContent = "Select a page to inspect its PDF/image resources.";
@@ -397,8 +495,10 @@ function renderResources() {
 
   if (state.viewMode === "pdf") {
     renderPdfMode(pdfs, images);
-  } else {
+  } else if (state.viewMode === "text") {
     renderTextMode(page, pdfs, images);
+  } else {
+    renderPageMode(page, resources, pdfs, images);
   }
 }
 
@@ -430,6 +530,54 @@ function renderPdfMode(pdfs, images) {
     <div class="item-meta">${images.length ? "This page has printout images. OCR mode for images is a later step." : "No PDF or printout images were found."}</div>
   `;
   resourcesList.append(card);
+}
+
+function renderPageMode(page, resources, pdfs, images) {
+  const card = document.createElement("div");
+  card.className = "item";
+  const previewImages = images.slice(0, 24);
+  const otherResources = resources.filter((resource) => !pdfs.includes(resource) && !images.includes(resource));
+  card.innerHTML = `
+    <div class="item-title"><span class="resource-kind">&#9638; page</span> OneNote page preview</div>
+    <div class="item-meta">Rough browser preview from embedded printout images and resources. This is not a full OneNote renderer yet.</div>
+    <div class="onenote-preview">
+      <div class="preview-note">
+        <strong>${escapeHtml(page.title || "Untitled page")}</strong><br>
+        ${pdfs.length} embedded PDF${pdfs.length === 1 ? "" : "s"} &middot; ${images.length} printout image${images.length === 1 ? "" : "s"} &middot; ${otherResources.length} other resource${otherResources.length === 1 ? "" : "s"}
+      </div>
+      ${
+        previewImages.length
+          ? previewImages
+              .map(
+                (image, index) => `
+                  <img
+                    class="preview-image"
+                    loading="lazy"
+                    alt="${escapeHtml(image.alt || `OneNote printout image ${index + 1}`)}"
+                    src="/api/resource?resource_url=${encodeURIComponent(image.url)}&kind=${encodeURIComponent(image.kind)}"
+                  />
+                `,
+              )
+              .join("")
+          : `<div class="preview-note">No printout images were found. Use PDF mode for embedded PDFs or Text mode for extracted PDF text.</div>`
+      }
+      ${
+        previewImages.length < images.length
+          ? `<div class="preview-note">${images.length - previewImages.length} additional image resource${images.length - previewImages.length === 1 ? "" : "s"} omitted from this preview.</div>`
+          : ""
+      }
+      ${
+        otherResources.length
+          ? `<div class="preview-resource-grid">${otherResources
+              .slice(0, 12)
+              .map((resource) => `<div class="preview-note">${escapeHtml(resource.kind || resource.tag)}<br>${escapeHtml(resource.alt || resource.url || "")}</div>`)
+              .join("")}</div>`
+          : ""
+      }
+    </div>
+  `;
+  resourcesList.append(card);
+  loadCacheMetrics();
 }
 
 async function loadPdfFrame(pdf, card) {
@@ -519,11 +667,36 @@ function applyLayout(layout) {
 function resetLayout() {
   localStorage.removeItem("onenote-layout");
   localStorage.removeItem("onenote-collapsed-panels");
+  localStorage.removeItem("onenote-panel-font-step");
   state.collapsedPanels = {};
+  state.panelFontStep = 0;
   document.documentElement.style.removeProperty("--left-col");
   document.documentElement.style.removeProperty("--middle-col");
   document.documentElement.style.removeProperty("--right-col");
   applyCollapsedPanels();
+  applyPanelDisplaySettings();
+}
+
+function setPanelFontStep(step) {
+  state.panelFontStep = Math.max(-3, Math.min(4, step));
+  localStorage.setItem("onenote-panel-font-step", String(state.panelFontStep));
+  applyPanelDisplaySettings();
+}
+
+function setShowDates(show) {
+  state.showDates = show;
+  localStorage.setItem("onenote-show-dates", show ? "1" : "0");
+  applyPanelDisplaySettings();
+}
+
+function applyPanelDisplaySettings() {
+  const base = 14 + state.panelFontStep;
+  const meta = Math.max(10, base - 2);
+  document.documentElement.style.setProperty("--panel-font-size", `${base}px`);
+  document.documentElement.style.setProperty("--panel-meta-size", `${meta}px`);
+  document.body.classList.toggle("hide-dates", !state.showDates);
+  toggleDatesButton.classList.toggle("active", state.showDates);
+  toggleDatesButton.textContent = state.showDates ? "Dates On" : "Dates Off";
 }
 
 function readLayout() {
@@ -617,13 +790,14 @@ function renderCacheMetrics(metrics) {
   const total = Number(metrics.pdf_resources || 0);
   const remaining = Number(metrics.remaining_pdf_resources || 0);
   cacheProgressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
-  cacheProgressLabel.textContent = `Cache: ${percent.toFixed(1)}%`;
-  cacheProgressCount.textContent = `${cached}/${total} PDFs, ${formatBytes(metrics.bytes || 0)}`;
+  cacheProgressLabel.textContent = `Discovered PDF cache: ${percent.toFixed(1)}%`;
+  cacheProgressCount.textContent = `${cached}/${total} PDFs, ${formatBytes(metrics.bytes || 0)} cached`;
   cacheProgress.title = [
-    `${cached} of ${total} discovered PDF resources are downloaded into the local cache.`,
-    `${remaining} PDF resources remain based on currently discovered OneNote pages/resources.`,
+    `${cached} of ${total} discovered original PDF resources are downloaded into the local cache.`,
+    `${remaining} PDF resources remain based on currently discovered OneNote page/resource metadata.`,
+    `${metrics.pages || 0} OneNote pages and ${metrics.resources || 0} embedded resources are currently known locally.`,
     `Estimated remaining warm-cache time: about ${metrics.estimated_minutes_1_5s_throttle} minutes in moderate batches, or ${metrics.estimated_minutes_3s_throttle} minutes at a gentler throttle.`,
-    metrics.scope_note || "Refresh metadata to improve the estimate for the full notebook.",
+    metrics.scope_note || "This is a discovered-resource metric, not a full OneDrive storage audit.",
   ].join("\n");
 }
 
@@ -640,6 +814,7 @@ function formatBytes(bytes) {
 
 applyLayout();
 applyCollapsedPanels();
+applyPanelDisplaySettings();
 setupSplitters();
 setViewMode(state.viewMode);
 setPdfSearchMode(state.searchPdfContent);

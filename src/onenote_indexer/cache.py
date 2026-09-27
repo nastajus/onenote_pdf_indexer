@@ -408,5 +408,5 @@ def cache_metrics(db: sqlite3.Connection) -> dict[str, Any]:
         "remaining_pdf_resources": remaining,
         "estimated_minutes_1_5s_throttle": round((remaining * 4.0) / 60, 1),
         "estimated_minutes_3s_throttle": round((remaining * 6.0) / 60, 1),
-        "scope_note": "Based on discovered pages/resources in the local cache. Run warm-cache --refresh-metadata to broaden the denominator.",
+        "scope_note": "This is not the whole OneDrive storage total. It covers original PDF resources discovered from cached OneNote page metadata; printout images, note markup, stale copies, and undiscovered pages can make OneDrive report much more storage.",
     }
