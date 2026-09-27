@@ -5,6 +5,10 @@ const state = {
   pages: [],
   resources: [],
   viewMode: localStorage.getItem("onenote-view-mode") || "pdf",
+  searchPdfContent: localStorage.getItem("onenote-search-pdf") === "1",
+  searchResults: [],
+  searchTimer: null,
+  collapsedPanels: JSON.parse(localStorage.getItem("onenote-collapsed-panels") || "{}"),
 };
 
 const accountStatus = document.querySelector("#accountStatus");
@@ -16,16 +20,22 @@ const queryInput = document.querySelector("#queryInput");
 const grid = document.querySelector(".grid");
 const viewPdfButton = document.querySelector("#viewPdfButton");
 const viewTextButton = document.querySelector("#viewTextButton");
+const searchPdfButton = document.querySelector("#searchPdfButton");
 const refreshSelectedButton = document.querySelector("#refreshSelectedButton");
 const resetLayoutButton = document.querySelector("#resetLayoutButton");
 const splitters = document.querySelectorAll(".splitter");
+const panels = document.querySelectorAll("[data-panel]");
+const cacheProgress = document.querySelector("#cacheProgress");
+const cacheProgressFill = document.querySelector("#cacheProgressFill");
+const cacheProgressLabel = document.querySelector("#cacheProgressLabel");
+const cacheProgressCount = document.querySelector("#cacheProgressCount");
 
 document.querySelector("#refreshButton").addEventListener("click", () => {
   loadBasics({ refresh: true });
 });
 
 queryInput.addEventListener("input", () => {
-  renderPages();
+  handleQueryInput();
 });
 
 viewPdfButton.addEventListener("click", () => {
@@ -34,6 +44,10 @@ viewPdfButton.addEventListener("click", () => {
 
 viewTextButton.addEventListener("click", () => {
   setViewMode("text");
+});
+
+searchPdfButton.addEventListener("click", () => {
+  setPdfSearchMode(!state.searchPdfContent);
 });
 
 refreshSelectedButton.addEventListener("click", () => {
@@ -48,6 +62,14 @@ refreshSelectedButton.addEventListener("click", () => {
 
 resetLayoutButton.addEventListener("click", () => {
   resetLayout();
+});
+
+document.querySelectorAll("[data-collapse-panel]").forEach((button) => {
+  button.addEventListener("click", () => setPanelCollapsed(button.dataset.collapsePanel, true));
+});
+
+document.querySelectorAll("[data-expand-panel]").forEach((button) => {
+  button.addEventListener("click", () => setPanelCollapsed(button.dataset.expandPanel, false));
 });
 
 async function api(path) {
@@ -129,6 +151,8 @@ async function loadBasics({ refresh = false } = {}) {
   } catch (error) {
     renderError(sectionsList, error);
   }
+
+  loadCacheMetrics();
 }
 
 async function selectFirstSectionWithPages({ refresh = false } = {}) {
@@ -176,6 +200,40 @@ async function selectSection(sectionId, { refresh = false } = {}) {
 
   try {
     state.pages = await api(`/api/pages?${params}`);
+    handleQueryInput();
+  } catch (error) {
+    renderError(pagesList, error);
+  }
+}
+
+function handleQueryInput() {
+  window.clearTimeout(state.searchTimer);
+  const query = queryInput.value.trim();
+
+  if (!state.searchPdfContent || query.length < 2) {
+    state.searchResults = [];
+    renderPages();
+    return;
+  }
+
+  pagesList.textContent = "Searching cached PDF text...";
+  state.searchTimer = window.setTimeout(() => {
+    loadPdfSearch(query);
+  }, 250);
+}
+
+async function loadPdfSearch(query) {
+  const params = new URLSearchParams({ q: query, limit: "75" });
+  if (state.selectedSectionId) {
+    params.set("section_id", state.selectedSectionId);
+  }
+
+  try {
+    const payload = await api(`/api/search?${params}`);
+    if (query !== queryInput.value.trim()) {
+      return;
+    }
+    state.searchResults = payload.results || [];
     renderPages();
   } catch (error) {
     renderError(pagesList, error);
@@ -184,6 +242,11 @@ async function selectSection(sectionId, { refresh = false } = {}) {
 
 function renderPages() {
   const query = queryInput.value.trim().toLowerCase();
+  if (state.searchPdfContent && query.length >= 2) {
+    renderPdfSearchResults();
+    return;
+  }
+
   const pages = state.pages.filter((page) => {
     const section = page._section?.displayName || "";
     const title = page.title || "";
@@ -216,6 +279,32 @@ function renderPages() {
   }
 }
 
+function renderPdfSearchResults() {
+  const query = queryInput.value.trim();
+  if (!state.searchResults.length) {
+    pagesList.textContent = query ? "No cached PDF text matches this search." : "Enter a search term.";
+    return;
+  }
+
+  pagesList.innerHTML = "";
+  for (const result of state.searchResults) {
+    const page = result.page || {};
+    const button = document.createElement("button");
+    button.className = "item page-item search-hit";
+    button.type = "button";
+    button.innerHTML = `
+      <div class="page-item-main">
+        <div class="item-title">${escapeHtml(page.title || "Untitled page")}</div>
+        <div class="item-meta">PDF page ${escapeHtml(result.pdf_page_number || "?")} &middot; ${escapeHtml(page.lastModifiedDateTime || result.page_id)}</div>
+        <div class="search-hit-snippet">${escapeHtml(result.snippet || "")}</div>
+      </div>
+      <span class="cache-mark" title="Matched cached extracted PDF text">&#9671;</span>
+    `;
+    button.addEventListener("click", () => loadResources(page));
+    pagesList.append(button);
+  }
+}
+
 async function loadResources(page, { refresh = false } = {}) {
   state.selectedPage = page;
   state.resources = [];
@@ -234,6 +323,7 @@ async function loadResources(page, { refresh = false } = {}) {
     };
     renderPages();
     renderResources();
+    loadCacheMetrics();
   } catch (error) {
     renderError(resourcesList, error);
   }
@@ -245,6 +335,16 @@ function setViewMode(mode) {
   viewPdfButton.classList.toggle("active", mode === "pdf");
   viewTextButton.classList.toggle("active", mode === "text");
   renderResources();
+}
+
+function setPdfSearchMode(enabled) {
+  state.searchPdfContent = enabled;
+  localStorage.setItem("onenote-search-pdf", enabled ? "1" : "0");
+  searchPdfButton.classList.toggle("active", enabled);
+  queryInput.placeholder = enabled
+    ? "Search extracted PDF text in the selected section"
+    : "Filter page titles in the selected section";
+  handleQueryInput();
 }
 
 function renderResources() {
@@ -265,10 +365,19 @@ function renderResources() {
 
   const unavailable = resources.find((resource) => resource.kind === "unavailable");
   if (unavailable) {
+    const diagnostics = (unavailable.diagnostics || [])
+      .map((row) => `<div class="diagnostic-row"><strong>${escapeHtml(row.label)}:</strong> ${escapeHtml(row.value)}</div>`)
+      .join("");
+    const link = unavailable.oneNoteWebUrl
+      ? `<div class="item-meta"><a href="${escapeHtml(unavailable.oneNoteWebUrl)}" target="_blank" rel="noreferrer">Open this page in OneNote Online</a></div>`
+      : "";
     resourcesList.innerHTML = `
       <div class="item">
         <div class="item-title">Resource unavailable</div>
         <div class="item-meta">${escapeHtml(unavailable.message || "OneNote did not return resources for this page.")}</div>
+        <div class="item-meta">${escapeHtml(unavailable.details || "Refresh Selected will retry the page-content lookup.")}</div>
+        ${link}
+        <div class="diagnostic-list">${diagnostics}</div>
       </div>
     `;
     return;
@@ -282,7 +391,7 @@ function renderResources() {
   summary.className = "resource-summary";
   summary.innerHTML = `
     <div class="item-title">${escapeHtml(page.title || "Untitled page")}</div>
-    <div class="item-meta">${pdfs.length} embedded PDF${pdfs.length === 1 ? "" : "s"} · ${images.length} printout image${images.length === 1 ? "" : "s"}</div>
+    <div class="item-meta">${pdfs.length} embedded PDF${pdfs.length === 1 ? "" : "s"} &middot; ${images.length} printout image${images.length === 1 ? "" : "s"}</div>
   `;
   resourcesList.append(summary);
 
@@ -343,6 +452,7 @@ async function loadPdfFrame(pdf, card) {
     iframe.title = "Embedded PDF";
     iframe.src = `/api/resource?resource_url=${encodeURIComponent(pdf.url)}&kind=${encodeURIComponent(pdf.kind)}`;
     card.append(iframe);
+    loadCacheMetrics();
   } catch (error) {
     card.innerHTML = `
       <div class="item-title">PDF unavailable</div>
@@ -389,6 +499,7 @@ async function loadPdfText(page, resource, card) {
       .join("\n\n---\n\n");
 
     textBox.textContent = previewPages || `PDF has ${text.page_count} pages, but no extractable text was found.`;
+    loadCacheMetrics();
   } catch (error) {
     textBox.textContent = `PDF text extraction failed: ${error.message}`;
   }
@@ -407,9 +518,12 @@ function applyLayout(layout) {
 
 function resetLayout() {
   localStorage.removeItem("onenote-layout");
+  localStorage.removeItem("onenote-collapsed-panels");
+  state.collapsedPanels = {};
   document.documentElement.style.removeProperty("--left-col");
   document.documentElement.style.removeProperty("--middle-col");
   document.documentElement.style.removeProperty("--right-col");
+  applyCollapsedPanels();
 }
 
 function readLayout() {
@@ -430,6 +544,12 @@ function setupSplitters() {
   for (const splitter of splitters) {
     splitter.addEventListener("pointerdown", (event) => {
       event.preventDefault();
+      if (
+        (splitter.dataset.splitter === "left" && (state.collapsedPanels.left || state.collapsedPanels.middle)) ||
+        (splitter.dataset.splitter === "right" && (state.collapsedPanels.middle || state.collapsedPanels.right))
+      ) {
+        return;
+      }
       splitter.classList.add("active");
       splitter.setPointerCapture(event.pointerId);
 
@@ -464,7 +584,63 @@ function setupSplitters() {
   }
 }
 
+function setPanelCollapsed(panel, collapsed) {
+  state.collapsedPanels[panel] = collapsed;
+  localStorage.setItem("onenote-collapsed-panels", JSON.stringify(state.collapsedPanels));
+  applyCollapsedPanels();
+}
+
+function applyCollapsedPanels() {
+  for (const panel of panels) {
+    const key = panel.dataset.panel;
+    panel.classList.toggle("collapsed", Boolean(state.collapsedPanels[key]));
+  }
+  for (const key of ["left", "middle", "right"]) {
+    document.documentElement.classList.toggle(`collapse-${key}`, Boolean(state.collapsedPanels[key]));
+  }
+}
+
+async function loadCacheMetrics() {
+  try {
+    const metrics = await api("/api/cache-metrics");
+    renderCacheMetrics(metrics);
+  } catch (error) {
+    cacheProgressLabel.textContent = "Cache: unavailable";
+    cacheProgressCount.textContent = "";
+    cacheProgress.title = error.message;
+  }
+}
+
+function renderCacheMetrics(metrics) {
+  const percent = Number(metrics.percent || 0);
+  const cached = Number(metrics.pdf_blobs || 0);
+  const total = Number(metrics.pdf_resources || 0);
+  const remaining = Number(metrics.remaining_pdf_resources || 0);
+  cacheProgressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  cacheProgressLabel.textContent = `Cache: ${percent.toFixed(1)}%`;
+  cacheProgressCount.textContent = `${cached}/${total} PDFs, ${formatBytes(metrics.bytes || 0)}`;
+  cacheProgress.title = [
+    `${cached} of ${total} discovered PDF resources are downloaded into the local cache.`,
+    `${remaining} PDF resources remain based on currently discovered OneNote pages/resources.`,
+    `Estimated remaining warm-cache time: about ${metrics.estimated_minutes_1_5s_throttle} minutes in moderate batches, or ${metrics.estimated_minutes_3s_throttle} minutes at a gentler throttle.`,
+    metrics.scope_note || "Refresh metadata to improve the estimate for the full notebook.",
+  ].join("\n");
+}
+
+function formatBytes(bytes) {
+  const units = ["B", "KB", "MB", "GB"];
+  let value = Number(bytes || 0);
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
 applyLayout();
+applyCollapsedPanels();
 setupSplitters();
 setViewMode(state.viewMode);
+setPdfSearchMode(state.searchPdfContent);
 loadBasics();

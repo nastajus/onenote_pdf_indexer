@@ -21,25 +21,44 @@
       </section>
 
       <section class="grid">
-        <aside class="panel">
-          <h2>Notebooks</h2>
-          <div id="notebooksList" class="list">Loading...</div>
-          <h2>Sections</h2>
-          <div id="sectionsList" class="list">Loading...</div>
+        <aside class="panel" data-panel="left">
+          <button class="panel-rail" data-expand-panel="left" type="button" title="Show notebooks and sections">Library &#8250;</button>
+          <div class="panel-content">
+            <div class="panel-titlebar">
+              <h2>Library</h2>
+              <button class="collapse-button" data-collapse-panel="left" type="button" title="Collapse library panel">&#8249;</button>
+            </div>
+            <h3>Notebooks</h3>
+            <div id="notebooksList" class="list">Loading...</div>
+            <h3>Sections</h3>
+            <div id="sectionsList" class="list">Loading...</div>
+          </div>
         </aside>
 
         <div class="splitter" data-splitter="left" role="separator" aria-orientation="vertical" title="Drag to resize panels"></div>
 
-        <section class="panel">
-          <h2>Pages</h2>
-          <div id="pagesList" class="list">Select a section to load its pages.</div>
+        <section class="panel" data-panel="middle">
+          <button class="panel-rail" data-expand-panel="middle" type="button" title="Show pages">&#8250; Pages</button>
+          <div class="panel-content">
+            <div class="panel-titlebar">
+              <h2>Pages</h2>
+              <button class="collapse-button" data-collapse-panel="middle" type="button" title="Collapse pages panel">&#8249;</button>
+            </div>
+            <div id="pagesList" class="list">Select a section to load its pages.</div>
+          </div>
         </section>
 
         <div class="splitter" data-splitter="right" role="separator" aria-orientation="vertical" title="Drag to resize panels"></div>
 
-        <section class="panel">
-          <h2>Embedded Resources</h2>
-          <div id="resourcesList" class="list">Select a page to inspect its PDF/image resources.</div>
+        <section class="panel" data-panel="right">
+          <button class="panel-rail" data-expand-panel="right" type="button" title="Show embedded resources">&#8249; PDF</button>
+          <div class="panel-content">
+            <div class="panel-titlebar">
+              <h2>Embedded Resources</h2>
+              <button class="collapse-button" data-collapse-panel="right" type="button" title="Collapse PDF panel">&#8250;</button>
+            </div>
+            <div id="resourcesList" class="list">Select a page to inspect its PDF/image resources.</div>
+          </div>
         </section>
       </section>
 
@@ -54,7 +73,25 @@
             Text
           </button>
         </div>
+        <div class="cache-progress" id="cacheProgress" title="Cache metrics are based on resources discovered locally so far.">
+          <div class="cache-progress-text">
+            <span id="cacheProgressLabel">Cache: assessing...</span>
+            <span id="cacheProgressCount"></span>
+          </div>
+          <div class="cache-progress-track" aria-hidden="true">
+            <div id="cacheProgressFill" class="cache-progress-fill"></div>
+          </div>
+        </div>
         <div class="control-group">
+          <button
+            id="searchPdfButton"
+            class="mode-button"
+            type="button"
+            title="Search extracted PDF text in the local cache. This can be slower than title filtering, so switch it on only when you need full-content search."
+          >
+            <span aria-hidden="true">&#9671;</span>
+            Search PDF Text
+          </button>
           <button id="resetLayoutButton" class="secondary-button" type="button">Reset Layout</button>
           <button id="refreshSelectedButton" class="secondary-button" type="button">Refresh Selected</button>
         </div>

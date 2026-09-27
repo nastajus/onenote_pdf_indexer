@@ -6,7 +6,8 @@ import mimetypes
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from typing import Any
+from urllib.parse import parse_qs, quote, urlparse
 
 from .auth import get_access_token
 from . import cache
@@ -93,30 +94,42 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
                     return
                 resources = cache.get_resources(db, page_id)
                 if force or not resources:
-                    old_urls = {resource.get("url", "") for resource in resources}
                     try:
-                        resources = [resource.__dict__ for resource in extract_resources(get_graph().page_content(page_id))]
+                        html, diagnostics = _page_content_with_fallback(get_graph(), db, page_id)
+                        resources = [resource.__dict__ for resource in extract_resources(html)]
                     except RuntimeError as exc:
                         if resources:
                             self._send_json(resources)
                             return
-                        if _is_graph_not_found(exc):
-                            self._send_json(
-                                [
-                                    {
-                                        "tag": "status",
-                                        "kind": "unavailable",
-                                        "url": "",
-                                        "message": "OneNote did not return this page's resources. It may still be syncing, moved, or stale in Graph.",
-                                    }
-                                ]
-                            )
-                            return
-                        raise
+                        self._send_json([_unavailable_resource(db, page_id, str(exc))])
+                        return
                     new_urls = {resource.get("url", "") for resource in resources}
                     cache.delete_missing_resource_data(db, page_id, new_urls)
                     cache.replace_resources(db, page_id, resources)
                 self._send_json(resources)
+                return
+
+            if path == "/api/search":
+                query_text = query.get("q", [""])[0].strip()
+                section_id = query.get("section_id", [""])[0] or None
+                limit = _int_query(query, "limit", 50)
+                if len(query_text) < 2:
+                    self._send_json({"results": [], "indexed_rows": cache.pdf_search_row_count(db)})
+                    return
+
+                if cache.pdf_search_row_count(db) == 0:
+                    cache.rebuild_pdf_search_index(db)
+
+                self._send_json(
+                    {
+                        "results": cache.search_pdf_text(db, query_text, section_id=section_id, limit=limit),
+                        "indexed_rows": cache.pdf_search_row_count(db),
+                    }
+                )
+                return
+
+            if path == "/api/cache-metrics":
+                self._send_json(cache.cache_metrics(db))
                 return
 
             if path == "/api/resource-info":
@@ -208,7 +221,14 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
                 self._send_json(text)
                 return
 
-            self._send_json({"error": f"Unknown API route: {path}"}, status=404)
+            self._send_json(
+                {
+                    "error": f"Unknown API route: {path}",
+                    "module": __file__,
+                    "known_routes": ["/api/cache-metrics", "/api/search", "/api/resources"],
+                },
+                status=404,
+            )
         except Exception as exc:
             self._send_json({"error": str(exc)}, status=500)
 
@@ -282,6 +302,72 @@ def _content_type_for_resource(resource_url: str, query: dict[str, list[str]]) -
     if "application/pdf" in kind:
         return "application/pdf"
     return "application/octet-stream"
+
+
+def _page_content_with_fallback(graph: GraphClient, db, page_id: str) -> tuple[str, list[dict[str, str]]]:
+    attempts: list[dict[str, str]] = []
+
+    def try_get(label: str, url: str) -> str | None:
+        try:
+            html = graph.get_text(url)
+            attempts.append({"source": label, "status": "ok"})
+            return html
+        except RuntimeError as exc:
+            attempts.append({"source": label, "status": "failed", "error": _short_error(exc)})
+            return None
+
+    html = try_get("page id content endpoint", f"/me/onenote/pages/{quote(page_id, safe='')}/content")
+    if html:
+        return html, attempts
+
+    page = cache.get_page(db, page_id) or {}
+    content_url = page.get("contentUrl")
+    if content_url:
+        html = try_get("cached page contentUrl", content_url)
+        if html:
+            return html, attempts
+
+    self_url = page.get("self")
+    if self_url:
+        html = try_get("cached page self/content", f"{self_url.rstrip('/')}/content")
+        if html:
+            return html, attempts
+
+    raise RuntimeError(f"Graph could not return OneNote page content after fallback attempts: {attempts}")
+
+
+def _unavailable_resource(db, page_id: str, error: str) -> dict[str, Any]:
+    page = cache.get_page(db, page_id) or {}
+    web_url = (((page.get("links") or {}).get("oneNoteWebUrl") or {}).get("href"))
+    return {
+        "tag": "status",
+        "kind": "unavailable",
+        "url": "",
+        "message": "OneNote did not return this page's resources after retrying alternate content URLs.",
+        "details": "Try opening the page in OneNote Online once, confirm it has finished syncing, then use Refresh Selected here.",
+        "diagnostics": [
+            {"label": "Page id", "value": page_id},
+            {"label": "Graph error", "value": _short_text(error, 500)},
+            {"label": "Content URL cached", "value": "yes" if page.get("contentUrl") else "no"},
+            {"label": "Self URL cached", "value": "yes" if page.get("self") else "no"},
+        ],
+        "oneNoteWebUrl": web_url,
+    }
+
+
+def _short_error(exc: RuntimeError) -> str:
+    return _short_text(str(exc), 300)
+
+
+def _short_text(value: str, limit: int) -> str:
+    return value if len(value) <= limit else f"{value[:limit]}..."
+
+
+def _int_query(query: dict[str, list[str]], key: str, default: int) -> int:
+    try:
+        return int(query.get(key, [str(default)])[0])
+    except ValueError:
+        return default
 
 
 def _is_graph_not_found(exc: RuntimeError) -> bool:
