@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -83,7 +84,7 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
                         page["_section"] = section
                     cache.replace_pages(db, section_id, pages)
                 for page in pages:
-                    page["_cache"] = _page_cache_summary(db, cache.get_resources(db, page["id"]))
+                    page["_cache"] = _page_cache_summary(db, cache.get_resources(db, page["id"]), page["id"])
                 self._send_json(pages)
                 return
 
@@ -93,6 +94,9 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
                     self._send_json({"error": "Missing page_id"}, status=400)
                     return
                 resources = cache.get_resources(db, page_id)
+                if not force and not resources and cache.get_page_preview(db, page_id):
+                    self._send_json(resources)
+                    return
                 if force or not resources:
                     try:
                         html, diagnostics = _page_content_with_fallback(get_graph(), db, page_id)
@@ -106,6 +110,7 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
                     new_urls = {resource.get("url", "") for resource in resources}
                     cache.delete_missing_resource_data(db, page_id, new_urls)
                     cache.replace_resources(db, page_id, resources)
+                    cache.put_page_preview(db, page_id, _page_preview_payload(html, resources))
                 self._send_json(resources)
                 return
 
@@ -121,12 +126,16 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
                     return
 
                 resources = [resource.__dict__ for resource in extract_resources(html)]
+                new_urls = {resource.get("url", "") for resource in resources}
+                cache.delete_missing_resource_data(db, page_id, new_urls)
                 cache.replace_resources(db, page_id, resources)
+                cache.put_page_preview(db, page_id, _page_preview_payload(html, resources))
                 self._send_json(
                     {
                         "html": render_onenote_html(html),
                         "resources": resources,
                         "diagnostics": diagnostics,
+                        "cache": _page_cache_summary(db, resources, page_id),
                     }
                 )
                 return
@@ -326,7 +335,7 @@ def _content_type_for_resource(resource_url: str, query: dict[str, list[str]]) -
     return "application/octet-stream"
 
 
-def _page_cache_summary(db, resources: list[dict[str, Any]]) -> dict[str, int | bool]:
+def _page_cache_summary(db, resources: list[dict[str, Any]], page_id: str | None = None) -> dict[str, int | bool]:
     pdf_count = sum(1 for resource in resources if _is_pdf_resource(resource))
     image_count = sum(1 for resource in resources if _is_image_resource(resource))
     pdf_blob_count = sum(
@@ -334,12 +343,14 @@ def _page_cache_summary(db, resources: list[dict[str, Any]]) -> dict[str, int | 
         for resource in resources
         if _is_pdf_resource(resource) and cache.get_resource_blob_info(db, str(resource.get("url", "")))
     )
+    page_preview = bool(page_id and cache.get_page_preview(db, page_id))
     return {
         "resource_count": len(resources),
         "pdf_count": pdf_count,
         "pdf_blob_count": pdf_blob_count,
         "image_count": image_count,
-        "native_hint": bool(resources and pdf_count == 0),
+        "page_preview": page_preview,
+        "native_hint": bool(pdf_count == 0 and (resources or page_preview)),
     }
 
 
@@ -349,12 +360,12 @@ def _section_cache_summary(db, section_id: str) -> dict[str, int]:
     pdf_pages = 0
     resource_pages = 0
     for page in pages:
-        summary = _page_cache_summary(db, cache.get_resources(db, page["id"]))
-        if summary["resource_count"]:
+        summary = _page_cache_summary(db, cache.get_resources(db, page["id"]), page["id"])
+        if summary["resource_count"] or summary["page_preview"]:
             resource_pages += 1
         if summary["pdf_blob_count"]:
             pdf_pages += 1
-        if summary["resource_count"] and not summary["pdf_count"]:
+        if summary["native_hint"]:
             native_pages += 1
     return {
         "page_count": len(pages),
@@ -373,6 +384,19 @@ def _is_pdf_resource(resource: dict[str, Any]) -> bool:
 def _is_image_resource(resource: dict[str, Any]) -> bool:
     kind = str(resource.get("kind", "")).lower()
     return kind == "image-fullres" or kind.startswith("image/")
+
+
+def _page_preview_payload(html: str, resources: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "html_length": len(html),
+        "resource_count": len(resources),
+        "has_text": _html_has_text(html),
+    }
+
+
+def _html_has_text(html: str) -> bool:
+    text = re.sub(r"<[^>]+>", " ", html)
+    return bool(re.sub(r"\s+", " ", text).strip())
 
 
 def _page_content_with_fallback(graph: GraphClient, db, page_id: str) -> tuple[str, list[dict[str, str]]]:

@@ -574,12 +574,13 @@ function renderPages() {
     const resourceCount = cacheInfo.resource_count || 0;
     const pdfCount = cacheInfo.pdf_count || 0;
     const pdfBlobCount = cacheInfo.pdf_blob_count || 0;
+    const pagePreviewCached = pdfCount === 0 && hasCachedPagePreview(cacheInfo);
     button.className = `item page-item${page.id === state.selectedPage?.id ? " active" : ""}`;
     button.type = "button";
     const cacheMark = pdfCount
       ? `<span class="cache-mark" title="Embedded PDF/resource metadata cached locally: ${pdfBlobCount}/${pdfCount} PDF${pdfCount === 1 ? "" : "s"} downloaded, ${resourceCount} total resource${resourceCount === 1 ? "" : "s"}">&#9670;</span>`
-      : resourceCount
-        ? `<span class="page-mark" title="Native OneNote-style page/resource metadata cached locally">&#9638;</span>`
+      : pagePreviewCached
+        ? `<span class="page-mark" title="Native OneNote page preview cached locally">&#9638;</span>`
       : "";
     button.innerHTML = `
       <div class="page-item-main">
@@ -599,9 +600,17 @@ function pageMatchesCacheFilter(page) {
     return Number(cacheInfo.pdf_blob_count || 0) > 0;
   }
   if (state.cacheFilter === "cached-pages") {
-    return Number(cacheInfo.resource_count || 0) > 0 && Number(cacheInfo.pdf_count || 0) === 0;
+    return Number(cacheInfo.pdf_count || 0) === 0 && hasCachedPagePreview(cacheInfo);
   }
   return true;
+}
+
+function hasCachedPagePreview(cacheInfo) {
+  return Boolean(
+    cacheInfo.page_preview ||
+    cacheInfo.native_hint ||
+    (Number(cacheInfo.resource_count || 0) > 0 && Number(cacheInfo.pdf_count || 0) === 0),
+  );
 }
 
 function sortPages(pages) {
@@ -694,15 +703,18 @@ async function loadResources(page, { refresh = false } = {}) {
 
   try {
     state.resources = await api(`/api/resources?${params}`);
+    const availableResources = state.resources.filter((resource) => resource.kind !== "unavailable");
     const pdfCount = state.resources.filter(isPdfResource).length;
     const imageCount = state.resources.filter(isImageResource).length;
+    const previousPagePreview = hasCachedPagePreview(page._cache || {});
     page._cache = {
       ...(page._cache || {}),
-      resource_count: state.resources.filter((resource) => resource.kind !== "unavailable").length,
+      resource_count: availableResources.length,
       pdf_count: pdfCount,
       pdf_blob_count: page._cache?.pdf_blob_count || 0,
       image_count: imageCount,
-      native_hint: Boolean(state.resources.length && !pdfCount),
+      page_preview: Boolean(previousPagePreview && !pdfCount),
+      native_hint: Boolean(!pdfCount && (availableResources.length || previousPagePreview)),
     };
     renderPages();
     renderResources();
@@ -873,11 +885,13 @@ async function loadOneNotePageFrame(page, card, summary) {
     });
     page._cache = {
       ...(page._cache || {}),
+      ...(payload.cache || {}),
       resource_count: resources.length,
       pdf_count: pdfs.length,
-      pdf_blob_count: page._cache?.pdf_blob_count || 0,
+      pdf_blob_count: payload.cache?.pdf_blob_count || page._cache?.pdf_blob_count || 0,
       image_count: images.length,
-      native_hint: Boolean(resources.length && !pdfs.length),
+      page_preview: true,
+      native_hint: Boolean(!pdfs.length),
     };
     renderPages();
     loadCacheMetrics();

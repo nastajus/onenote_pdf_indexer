@@ -52,6 +52,12 @@ def _init(db: sqlite3.Connection) -> None:
             primary key (page_id, url)
         );
 
+        create table if not exists page_previews (
+            page_id text primary key,
+            data text not null,
+            fetched_at text not null default current_timestamp
+        );
+
         create table if not exists pdf_text (
             page_id text not null,
             resource_url text not null,
@@ -147,6 +153,25 @@ def replace_resources(db: sqlite3.Connection, page_id: str, resources: list[dict
         db.executemany(
             "insert into resources (page_id, url, data) values (?, ?, ?)",
             [(page_id, resource["url"], json.dumps(resource, ensure_ascii=False)) for resource in resources],
+        )
+
+
+def get_page_preview(db: sqlite3.Connection, page_id: str) -> dict[str, Any] | None:
+    row = db.execute(
+        "select data from page_previews where page_id = ?",
+        (page_id,),
+    ).fetchone()
+    return json.loads(row["data"]) if row else None
+
+
+def put_page_preview(db: sqlite3.Connection, page_id: str, data: dict[str, Any]) -> None:
+    with db:
+        db.execute(
+            """
+            insert or replace into page_previews (page_id, data, fetched_at)
+            values (?, ?, current_timestamp)
+            """,
+            (page_id, json.dumps(data, ensure_ascii=False)),
         )
 
 
@@ -388,7 +413,8 @@ def cache_metrics(db: sqlite3.Connection) -> dict[str, Any]:
             (select count(*) from resource_blobs) as blobs,
             (select count(*) from resource_blobs where content_type = 'application/pdf') as pdf_blobs,
             (select coalesce(sum(size), 0) from resource_blobs) as bytes,
-            (select count(*) from pdf_text) as pdf_texts
+            (select count(*) from pdf_text) as pdf_texts,
+            (select count(*) from page_previews) as page_previews
         """
     ).fetchone()
     pdf_resources = int(row["pdf_resources"] or 0)
@@ -404,6 +430,7 @@ def cache_metrics(db: sqlite3.Connection) -> dict[str, Any]:
         "resource_blobs": int(row["blobs"] or 0),
         "bytes": int(row["bytes"] or 0),
         "pdf_texts": int(row["pdf_texts"] or 0),
+        "page_previews": int(row["page_previews"] or 0),
         "percent": percent,
         "remaining_pdf_resources": remaining,
         "estimated_minutes_1_5s_throttle": round((remaining * 4.0) / 60, 1),
