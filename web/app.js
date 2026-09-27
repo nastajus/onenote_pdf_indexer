@@ -11,6 +11,8 @@ const state = {
   searchPdfContent: localStorage.getItem("onenote-search-pdf") === "1",
   showDates: localStorage.getItem("onenote-show-dates") !== "0",
   panelFontStep: Number.parseInt(localStorage.getItem("onenote-panel-font-step") || "0", 10),
+  isRefreshingMetadata: false,
+  lastMetadataRefresh: 0,
   searchResults: [],
   searchTimer: null,
   collapsedPanels: JSON.parse(localStorage.getItem("onenote-collapsed-panels") || "{}"),
@@ -166,6 +168,9 @@ async function loadBasics({ refresh = false } = {}) {
 
   try {
     state.sections = await api(`/api/sections${refreshParam}`);
+    if (refresh) {
+      state.lastMetadataRefresh = Date.now();
+    }
     renderNotebooks();
     renderSections();
 
@@ -180,6 +185,9 @@ async function loadBasics({ refresh = false } = {}) {
   }
 
   loadCacheMetrics();
+  if (!refresh) {
+    window.setTimeout(() => refreshMetadata({ quiet: true }), 1200);
+  }
 }
 
 async function selectFirstSectionWithPages({ refresh = false } = {}) {
@@ -188,6 +196,91 @@ async function selectFirstSectionWithPages({ refresh = false } = {}) {
     if (state.pages.length) {
       return;
     }
+  }
+}
+
+function reconcileSelectionAfterMetadataRefresh() {
+  const selectedNotebookExists = state.notebooks.some((notebook) => notebook.id === state.selectedNotebookId);
+  if (!state.selectedNotebookId || !selectedNotebookExists) {
+    const primary = state.notebooks.find((notebook) => notebook.displayName === "Samira") || state.notebooks[0];
+    state.selectedNotebookId = primary?.id || null;
+    if (state.selectedNotebookId) {
+      localStorage.setItem("onenote-selected-notebook-id", state.selectedNotebookId);
+    } else {
+      localStorage.removeItem("onenote-selected-notebook-id");
+    }
+  }
+
+  const selectedSectionExists = filteredSections().some((section) => section.id === state.selectedSectionId);
+  if (state.selectedSectionId && !selectedSectionExists) {
+    state.selectedSectionId = null;
+    state.selectedPageId = null;
+    state.selectedPage = null;
+    state.pages = [];
+    state.resources = [];
+    localStorage.removeItem("onenote-selected-section-id");
+    localStorage.removeItem("onenote-selected-page-id");
+    pagesList.textContent = "Select a section to load its pages.";
+    resourcesList.textContent = "Select a page to inspect its PDF/image resources.";
+  }
+}
+
+async function refreshMetadata({ force = true, quiet = true } = {}) {
+  if (state.isRefreshingMetadata) {
+    return;
+  }
+
+  state.isRefreshingMetadata = true;
+  const previousStatus = accountStatus.textContent;
+  if (!quiet) {
+    accountStatus.textContent = "Refreshing OneNote notebook metadata...";
+  }
+
+  const refreshParam = force ? "?refresh=1" : "";
+  try {
+    const [notebooks, sections] = await Promise.all([
+      api(`/api/notebooks${refreshParam}`),
+      api(`/api/sections${refreshParam}`),
+    ]);
+    state.notebooks = notebooks;
+    state.sections = sections;
+    state.lastMetadataRefresh = Date.now();
+    reconcileSelectionAfterMetadataRefresh();
+    renderNotebooks();
+    renderSections();
+
+    if (!state.selectedSectionId) {
+      selectFirstSectionWithPages();
+    } else {
+      const currentSectionIsVisible = filteredSections().some((section) => section.id === state.selectedSectionId);
+      if (currentSectionIsVisible && !state.pages.length) {
+        selectSection(state.selectedSectionId);
+      }
+    }
+
+    if (!quiet) {
+      accountStatus.textContent = "Notebook metadata refreshed.";
+      window.setTimeout(() => {
+        if (accountStatus.textContent === "Notebook metadata refreshed.") {
+          accountStatus.textContent = previousStatus;
+        }
+      }, 1600);
+    }
+  } catch (error) {
+    if (!quiet) {
+      accountStatus.innerHTML = `<span class="error">${escapeHtml(error.message)}</span>`;
+    }
+  } finally {
+    state.isRefreshingMetadata = false;
+  }
+}
+
+function maybeRefreshMetadataOnFocus() {
+  if (document.visibilityState !== "visible") {
+    return;
+  }
+  if (Date.now() - state.lastMetadataRefresh > 30000) {
+    refreshMetadata({ quiet: true });
   }
 }
 
@@ -819,3 +912,6 @@ setupSplitters();
 setViewMode(state.viewMode);
 setPdfSearchMode(state.searchPdfContent);
 loadBasics();
+window.addEventListener("focus", maybeRefreshMetadataOnFocus);
+document.addEventListener("visibilitychange", maybeRefreshMetadataOnFocus);
+window.setInterval(() => refreshMetadata({ quiet: true }), 120000);

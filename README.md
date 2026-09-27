@@ -68,6 +68,7 @@ Other debug options:
 ## Current Browser Behavior
 
 - Notebooks and sections are cached in `data/cache.sqlite3`.
+- Cached notebooks/sections are shown immediately, then silently refreshed from Graph on startup, browser focus, and a slow interval.
 - Sections are clickable.
 - Page metadata loads section-by-section and is cached locally.
 - Embedded resources are cached locally after a page is inspected.
@@ -75,7 +76,7 @@ Other debug options:
 - `image-fullres` resources are OneNote printout images, usually rendered PDF pages. These need OCR for text extraction.
 - `application/pdf` resources are original embedded PDFs. The app extracts and caches text from those PDFs by PDF page.
 - The server reads from cache before authenticating with Graph wherever possible.
-- The bottom control dock switches between embedded PDF view (`▣ PDF`) and extracted text view (`◇ Text`).
+- The bottom control dock switches between embedded PDF view, extracted text view, and a rough page preview.
 - **Search PDF Text** toggles full cached PDF-content search. Leave it off for fast title filtering; turn it on when you want results from extracted paper text and PDF page numbers.
 - The bottom cache bar shows downloaded/discovered PDF cache progress. Its tooltip explains the current denominator and rough remaining batch time.
 - Drag the vertical handles between columns to resize the notebook, page, and PDF/text panels.
@@ -84,7 +85,7 @@ Other debug options:
 - A diamond marker on a page means embedded resources for that page are cached locally.
 - Stale OneNote/Graph resource `404` responses are handled gracefully; cached resources are used first, missing refreshed resources are pruned, and page-content failures retry alternate cached Graph URLs before showing diagnostics.
 
-Use **Refresh** to force a fresh Graph fetch for notebooks, sections, and the selected section.
+Use **Refresh** to force a fresh Graph fetch for notebooks, sections, and the selected section. OneNote/Graph can still take a short while to reflect newly created or deleted notebooks after OneDrive/OneNote sync.
 Use **Refresh Selected** to refresh the selected page/section and prune cached resource data for resources that no longer match the OneNote page.
 
 ## Warm The Cache
