@@ -8,6 +8,7 @@ const state = {
   pages: [],
   resources: [],
   viewMode: localStorage.getItem("onenote-view-mode") || "pdf",
+  showPagePreview: localStorage.getItem("onenote-show-page-preview") !== "0",
   searchPdfContent: localStorage.getItem("onenote-search-pdf") === "1",
   showDates: localStorage.getItem("onenote-show-dates") !== "0",
   panelFontStep: Number.parseInt(localStorage.getItem("onenote-panel-font-step") || "0", 10),
@@ -41,6 +42,13 @@ const cacheProgressFill = document.querySelector("#cacheProgressFill");
 const cacheProgressLabel = document.querySelector("#cacheProgressLabel");
 const cacheProgressCount = document.querySelector("#cacheProgressCount");
 
+if (state.viewMode === "page") {
+  state.viewMode = "pdf";
+  state.showPagePreview = true;
+  localStorage.setItem("onenote-view-mode", "pdf");
+  localStorage.setItem("onenote-show-page-preview", "1");
+}
+
 document.querySelector("#refreshButton").addEventListener("click", () => {
   loadBasics({ refresh: true });
 });
@@ -58,7 +66,7 @@ viewTextButton.addEventListener("click", () => {
 });
 
 viewPageButton.addEventListener("click", () => {
-  setViewMode("page");
+  setPagePreviewMode(!state.showPagePreview);
 });
 
 searchPdfButton.addEventListener("click", () => {
@@ -121,6 +129,21 @@ function renderError(container, error) {
   container.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
 }
 
+function orderedNotebooks(notebooks = state.notebooks) {
+  return [...notebooks].sort((left, right) => {
+    const leftIsPrimary = (left.displayName || "").toLowerCase() === "samira";
+    const rightIsPrimary = (right.displayName || "").toLowerCase() === "samira";
+    if (leftIsPrimary !== rightIsPrimary) {
+      return leftIsPrimary ? -1 : 1;
+    }
+    return (left.displayName || "").localeCompare(right.displayName || "");
+  });
+}
+
+function primaryNotebook() {
+  return orderedNotebooks()[0];
+}
+
 function renderItems(container, items, options) {
   if (!items.length) {
     container.textContent = options.emptyText;
@@ -157,7 +180,7 @@ async function loadBasics({ refresh = false } = {}) {
   try {
     state.notebooks = await api(`/api/notebooks${refreshParam}`);
     if (!state.selectedNotebookId && state.notebooks.length) {
-      const primary = state.notebooks.find((notebook) => notebook.displayName === "Samira") || state.notebooks[0];
+      const primary = primaryNotebook();
       state.selectedNotebookId = primary.id;
       localStorage.setItem("onenote-selected-notebook-id", primary.id);
     }
@@ -202,7 +225,7 @@ async function selectFirstSectionWithPages({ refresh = false } = {}) {
 function reconcileSelectionAfterMetadataRefresh() {
   const selectedNotebookExists = state.notebooks.some((notebook) => notebook.id === state.selectedNotebookId);
   if (!state.selectedNotebookId || !selectedNotebookExists) {
-    const primary = state.notebooks.find((notebook) => notebook.displayName === "Samira") || state.notebooks[0];
+    const primary = primaryNotebook();
     state.selectedNotebookId = primary?.id || null;
     if (state.selectedNotebookId) {
       localStorage.setItem("onenote-selected-notebook-id", state.selectedNotebookId);
@@ -291,7 +314,7 @@ function renderNotebooks() {
   }
 
   notebooksList.innerHTML = "";
-  for (const notebook of state.notebooks) {
+  for (const notebook of orderedNotebooks()) {
     const sectionCount = state.sections.filter((section) => section.parentNotebook?.id === notebook.id).length;
     const button = document.createElement("button");
     button.className = `item${notebook.id === state.selectedNotebookId ? " active" : ""}`;
@@ -519,11 +542,20 @@ async function loadResources(page, { refresh = false } = {}) {
 }
 
 function setViewMode(mode) {
+  if (!["pdf", "text"].includes(mode)) {
+    mode = "pdf";
+  }
   state.viewMode = mode;
   localStorage.setItem("onenote-view-mode", mode);
   viewPdfButton.classList.toggle("active", mode === "pdf");
   viewTextButton.classList.toggle("active", mode === "text");
-  viewPageButton.classList.toggle("active", mode === "page");
+  renderResources();
+}
+
+function setPagePreviewMode(enabled) {
+  state.showPagePreview = enabled;
+  localStorage.setItem("onenote-show-page-preview", enabled ? "1" : "0");
+  viewPageButton.classList.toggle("active", enabled);
   renderResources();
 }
 
@@ -542,7 +574,7 @@ function renderResources() {
   const resources = state.resources;
   viewPdfButton.classList.toggle("active", state.viewMode === "pdf");
   viewTextButton.classList.toggle("active", state.viewMode === "text");
-  viewPageButton.classList.toggle("active", state.viewMode === "page");
+  viewPageButton.classList.toggle("active", state.showPagePreview);
 
   if (!page) {
     resourcesList.textContent = "Select a page to inspect its PDF/image resources.";
@@ -588,9 +620,11 @@ function renderResources() {
 
   if (state.viewMode === "pdf") {
     renderPdfMode(pdfs, images);
-  } else if (state.viewMode === "text") {
-    renderTextMode(page, pdfs, images);
   } else {
+    renderTextMode(page, pdfs, images);
+  }
+
+  if (state.showPagePreview) {
     renderPageMode(page, resources, pdfs, images);
   }
 }
@@ -910,6 +944,7 @@ applyCollapsedPanels();
 applyPanelDisplaySettings();
 setupSplitters();
 setViewMode(state.viewMode);
+setPagePreviewMode(state.showPagePreview);
 setPdfSearchMode(state.searchPdfContent);
 loadBasics();
 window.addEventListener("focus", maybeRefreshMetadataOnFocus);
