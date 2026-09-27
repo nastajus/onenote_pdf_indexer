@@ -12,6 +12,7 @@ const state = {
   showDates: localStorage.getItem("onenote-show-dates") !== "0",
   sectionSort: localStorage.getItem("onenote-section-sort") || "onenote",
   pageSort: localStorage.getItem("onenote-page-sort") || "onenote",
+  cacheFilter: localStorage.getItem("onenote-cache-filter") || "all",
   panelFontStep: Number.parseInt(localStorage.getItem("onenote-panel-font-step") || "0", 10),
   isRefreshingMetadata: false,
   lastMetadataRefresh: 0,
@@ -33,6 +34,7 @@ const viewPageButton = document.querySelector("#viewPageButton");
 const searchPdfButton = document.querySelector("#searchPdfButton");
 const sectionSortSelect = document.querySelector("#sectionSortSelect");
 const pageSortSelect = document.querySelector("#pageSortSelect");
+const cacheFilterSelect = document.querySelector("#cacheFilterSelect");
 const fontSmallerButton = document.querySelector("#fontSmallerButton");
 const fontLargerButton = document.querySelector("#fontLargerButton");
 const toggleDatesButton = document.querySelector("#toggleDatesButton");
@@ -78,6 +80,12 @@ sectionSortSelect.addEventListener("change", () => {
 pageSortSelect.addEventListener("change", () => {
   state.pageSort = pageSortSelect.value;
   localStorage.setItem("onenote-page-sort", state.pageSort);
+  renderPages();
+});
+
+cacheFilterSelect.addEventListener("change", () => {
+  state.cacheFilter = cacheFilterSelect.value;
+  localStorage.setItem("onenote-cache-filter", state.cacheFilter);
   renderPages();
 });
 
@@ -479,7 +487,7 @@ function renderPages() {
   const pages = sortPages(state.pages.filter((page) => {
     const section = page._section?.displayName || "";
     const title = page.title || "";
-    return `${section} ${title}`.toLowerCase().includes(query);
+    return `${section} ${title}`.toLowerCase().includes(query) && pageMatchesCacheFilter(page);
   }));
 
   if (!pages.length) {
@@ -493,10 +501,11 @@ function renderPages() {
     const cacheInfo = page._cache || {};
     const resourceCount = cacheInfo.resource_count || 0;
     const pdfCount = cacheInfo.pdf_count || 0;
+    const pdfBlobCount = cacheInfo.pdf_blob_count || 0;
     button.className = `item page-item${page.id === state.selectedPage?.id ? " active" : ""}`;
     button.type = "button";
     const cacheMark = pdfCount
-      ? `<span class="cache-mark" title="Embedded PDF/resource metadata cached locally: ${pdfCount} PDF${pdfCount === 1 ? "" : "s"}, ${resourceCount} total resource${resourceCount === 1 ? "" : "s"}">&#9670;</span>`
+      ? `<span class="cache-mark" title="Embedded PDF/resource metadata cached locally: ${pdfBlobCount}/${pdfCount} PDF${pdfCount === 1 ? "" : "s"} downloaded, ${resourceCount} total resource${resourceCount === 1 ? "" : "s"}">&#9670;</span>`
       : resourceCount
         ? `<span class="page-mark" title="Native OneNote-style page/resource metadata cached locally">&#9638;</span>`
       : "";
@@ -510,6 +519,17 @@ function renderPages() {
     button.addEventListener("click", () => loadResources(page));
     pagesList.append(button);
   }
+}
+
+function pageMatchesCacheFilter(page) {
+  const cacheInfo = page._cache || {};
+  if (state.cacheFilter === "cached-pdfs") {
+    return Number(cacheInfo.pdf_blob_count || 0) > 0;
+  }
+  if (state.cacheFilter === "cached-pages") {
+    return Number(cacheInfo.resource_count || 0) > 0 && Number(cacheInfo.pdf_count || 0) === 0;
+  }
+  return true;
 }
 
 function sortPages(pages) {
@@ -608,6 +628,7 @@ async function loadResources(page, { refresh = false } = {}) {
       ...(page._cache || {}),
       resource_count: state.resources.filter((resource) => resource.kind !== "unavailable").length,
       pdf_count: pdfCount,
+      pdf_blob_count: page._cache?.pdf_blob_count || 0,
       image_count: imageCount,
       native_hint: Boolean(state.resources.length && !pdfCount),
     };
@@ -730,6 +751,18 @@ function renderPdfMode(pdfs, images) {
 }
 
 function renderPageMode(page, resources, pdfs, images) {
+  if (pdfs.length) {
+    const card = document.createElement("div");
+    card.className = "item page-pdf-card";
+    card.innerHTML = `
+      <div class="item-title"><span class="resource-kind">&#9635; PDF</span> Native PDF page view</div>
+      <div class="item-meta">Using the embedded PDF directly for antialiasing and selectable text. OneNote printout images are skipped in this mode.</div>
+    `;
+    resourcesList.append(card);
+    loadPdfFrame(pdfs[0], card, { pageMode: true });
+    return;
+  }
+
   const card = document.createElement("div");
   card.className = "item";
   card.innerHTML = `
@@ -761,6 +794,7 @@ async function loadOneNotePageFrame(page, card, summary) {
       ...(page._cache || {}),
       resource_count: resources.length,
       pdf_count: pdfs.length,
+      pdf_blob_count: page._cache?.pdf_blob_count || 0,
       image_count: images.length,
       native_hint: Boolean(resources.length && !pdfs.length),
     };
@@ -814,8 +848,11 @@ function buildOneNotePreviewDocument(page, html, counts) {
     border-radius: 6px;
     min-height: 480px;
     overflow: auto;
+    overflow-wrap: anywhere;
     padding: 18px;
     position: relative;
+    white-space: normal;
+    word-break: normal;
   }
   .onenote-body [style*="position:absolute"],
   .onenote-body [style*="position: absolute"] {
@@ -855,6 +892,15 @@ function buildOneNotePreviewDocument(page, html, counts) {
   .onenote-body div {
     max-width: 100%;
   }
+  .onenote-body p {
+    clear: both;
+    line-height: 1.35;
+    margin-block: 0.28em;
+    overflow-wrap: anywhere;
+  }
+  .onenote-body span {
+    line-height: inherit;
+  }
   .embedded-object {
     align-items: center;
     background: #f7f9fc;
@@ -892,7 +938,7 @@ function isImageResource(resource) {
   return kind === "image-fullres" || kind.startsWith("image/");
 }
 
-async function loadPdfFrame(pdf, card) {
+async function loadPdfFrame(pdf, card, options = {}) {
   try {
     const info = await api(`/api/resource-info?resource_url=${encodeURIComponent(pdf.url)}&kind=${encodeURIComponent(pdf.kind)}`);
     if (!info.available) {
@@ -904,14 +950,21 @@ async function loadPdfFrame(pdf, card) {
     }
 
     card.innerHTML = `
-      <div class="item-title"><span class="resource-kind">&#9635; PDF</span> Embedded PDF</div>
+      <div class="item-title"><span class="resource-kind">&#9635; PDF</span> ${options.pageMode ? "Native PDF page view" : "Embedded PDF"}</div>
       <div class="item-meta">Cached locally &middot; ${Math.round((info.size || 0) / 1024).toLocaleString()} KB &middot; ${escapeHtml((info.sha256 || "").slice(0, 12))}</div>
     `;
     const iframe = document.createElement("iframe");
-    iframe.className = "pdf-frame";
+    iframe.className = options.pageMode ? "pdf-frame page-pdf-frame" : "pdf-frame";
     iframe.title = "Embedded PDF";
-    iframe.src = `/api/resource?resource_url=${encodeURIComponent(pdf.url)}&kind=${encodeURIComponent(pdf.kind)}`;
+    iframe.src = `/api/resource?resource_url=${encodeURIComponent(pdf.url)}&kind=${encodeURIComponent(pdf.kind)}#view=FitH&zoom=page-width`;
     card.append(iframe);
+    if (state.selectedPage) {
+      state.selectedPage._cache = {
+        ...(state.selectedPage._cache || {}),
+        pdf_blob_count: Math.max(1, Number(state.selectedPage._cache?.pdf_blob_count || 0)),
+      };
+      renderPages();
+    }
     loadCacheMetrics();
   } catch (error) {
     card.innerHTML = `
@@ -1129,6 +1182,7 @@ applyCollapsedPanels();
 applyPanelDisplaySettings();
 sectionSortSelect.value = state.sectionSort;
 pageSortSelect.value = state.pageSort;
+cacheFilterSelect.value = state.cacheFilter;
 setupSplitters();
 setViewMode(state.viewMode);
 setPdfSearchMode(state.searchPdfContent);

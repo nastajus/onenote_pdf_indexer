@@ -172,7 +172,9 @@ class OneNoteHtmlRenderer(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         if not self.drop_depth:
-            self.parts.append(escape(data))
+            cleaned = data.replace("\ufffc", "")
+            if cleaned:
+                self.parts.append(escape(cleaned))
 
     def handle_entityref(self, name: str) -> None:
         if not self.drop_depth:

@@ -445,6 +445,15 @@ button.item.active {
   background: #ffffff;
 }
 
+.page-pdf-card {
+  min-height: calc(100vh - 210px);
+}
+
+.page-pdf-frame {
+  height: calc(100vh - 230px);
+  min-height: 820px;
+}
+
 .icon-button {
   min-width: 42px;
   padding-left: 10px;

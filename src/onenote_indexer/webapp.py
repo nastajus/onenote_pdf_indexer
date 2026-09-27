@@ -81,7 +81,7 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
                         page["_section"] = section
                     cache.replace_pages(db, section_id, pages)
                 for page in pages:
-                    page["_cache"] = _page_cache_summary(cache.get_resources(db, page["id"]))
+                    page["_cache"] = _page_cache_summary(db, cache.get_resources(db, page["id"]))
                 self._send_json(pages)
                 return
 
@@ -324,12 +324,18 @@ def _content_type_for_resource(resource_url: str, query: dict[str, list[str]]) -
     return "application/octet-stream"
 
 
-def _page_cache_summary(resources: list[dict[str, Any]]) -> dict[str, int | bool]:
+def _page_cache_summary(db, resources: list[dict[str, Any]]) -> dict[str, int | bool]:
     pdf_count = sum(1 for resource in resources if _is_pdf_resource(resource))
     image_count = sum(1 for resource in resources if _is_image_resource(resource))
+    pdf_blob_count = sum(
+        1
+        for resource in resources
+        if _is_pdf_resource(resource) and cache.get_resource_blob_info(db, str(resource.get("url", "")))
+    )
     return {
         "resource_count": len(resources),
         "pdf_count": pdf_count,
+        "pdf_blob_count": pdf_blob_count,
         "image_count": image_count,
         "native_hint": bool(resources and pdf_count == 0),
     }
