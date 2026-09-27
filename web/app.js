@@ -123,11 +123,30 @@ resetLayoutButton.addEventListener("click", () => {
 });
 
 document.querySelectorAll("[data-collapse-panel]").forEach((button) => {
-  button.addEventListener("click", () => setPanelCollapsed(button.dataset.collapsePanel, true));
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setPanelCollapsed(button.dataset.collapsePanel, true);
+  });
 });
 
 document.querySelectorAll("[data-expand-panel]").forEach((button) => {
   button.addEventListener("click", () => setPanelCollapsed(button.dataset.expandPanel, false));
+});
+
+document.querySelectorAll("[data-toggle-panel]").forEach((bar) => {
+  const toggle = () => setPanelCollapsed(bar.dataset.togglePanel, !state.collapsedPanels[bar.dataset.togglePanel]);
+  bar.addEventListener("click", (event) => {
+    if (event.target.closest("button")) {
+      return;
+    }
+    toggle();
+  });
+  bar.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      toggle();
+    }
+  });
 });
 
 async function api(path) {

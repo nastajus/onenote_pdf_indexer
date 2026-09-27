@@ -231,6 +231,19 @@ select {
   margin-bottom: 12px;
 }
 
+.panel-togglebar {
+  border-radius: 6px;
+  cursor: pointer;
+  margin: -6px -6px 12px;
+  padding: 6px;
+}
+
+.panel-togglebar:hover,
+.panel-togglebar:focus-visible {
+  background: #f8fbff;
+  outline: none;
+}
+
 .panel h2,
 .panel h3 {
   margin: 0 0 12px;
