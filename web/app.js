@@ -13,6 +13,7 @@ const state = {
   sectionSort: localStorage.getItem("onenote-section-sort") || "onenote",
   pageSort: localStorage.getItem("onenote-page-sort") || "onenote",
   cacheFilter: localStorage.getItem("onenote-cache-filter") || "all",
+  showSectionColors: localStorage.getItem("onenote-section-colors") === "1",
   panelFontStep: Number.parseInt(localStorage.getItem("onenote-panel-font-step") || "0", 10),
   isRefreshingMetadata: false,
   lastMetadataRefresh: 0,
@@ -37,6 +38,7 @@ const pageSortSelect = document.querySelector("#pageSortSelect");
 const cacheFilterSelect = document.querySelector("#cacheFilterSelect");
 const fontSmallerButton = document.querySelector("#fontSmallerButton");
 const fontLargerButton = document.querySelector("#fontLargerButton");
+const sectionColorsButton = document.querySelector("#sectionColorsButton");
 const toggleDatesButton = document.querySelector("#toggleDatesButton");
 const refreshSelectedButton = document.querySelector("#refreshSelectedButton");
 const resetLayoutButton = document.querySelector("#resetLayoutButton");
@@ -86,6 +88,7 @@ pageSortSelect.addEventListener("change", () => {
 cacheFilterSelect.addEventListener("change", () => {
   state.cacheFilter = cacheFilterSelect.value;
   localStorage.setItem("onenote-cache-filter", state.cacheFilter);
+  renderSections();
   renderPages();
 });
 
@@ -95,6 +98,10 @@ fontSmallerButton.addEventListener("click", () => {
 
 fontLargerButton.addEventListener("click", () => {
   setPanelFontStep(state.panelFontStep + 1);
+});
+
+sectionColorsButton.addEventListener("click", () => {
+  setSectionColors(!state.showSectionColors);
 });
 
 toggleDatesButton.addEventListener("click", () => {
@@ -398,11 +405,17 @@ function renderSections() {
   sectionsList.innerHTML = "";
   for (const section of sections) {
     const button = document.createElement("button");
-    button.className = `item${section.id === state.selectedSectionId ? " active" : ""}`;
+    const cacheInfo = section._cache || {};
+    button.className = `item section-item${state.showSectionColors ? " colored" : ""}${section.id === state.selectedSectionId ? " active" : ""}`;
     button.type = "button";
+    button.style.setProperty("--section-color", sectionColor(section));
+    const cacheLabel = sectionCacheLabel(cacheInfo);
     button.innerHTML = `
-      <div class="item-title">${escapeHtml(section.displayName || "Untitled section")}</div>
-      <div class="item-meta"><span class="date-meta">${escapeHtml(section.lastModifiedDateTime || section.id)}</span></div>
+      <div class="section-item-main">
+        <div class="item-title">${escapeHtml(section.displayName || "Untitled section")}</div>
+        <div class="item-meta"><span class="date-meta">${escapeHtml(section.lastModifiedDateTime || section.id)}</span></div>
+      </div>
+      ${cacheLabel}
     `;
     button.addEventListener("click", () => {
       state.selectedPageId = null;
@@ -411,6 +424,35 @@ function renderSections() {
     });
     sectionsList.append(button);
   }
+}
+
+function sectionCacheLabel(cacheInfo) {
+  if (state.cacheFilter === "cached-pages") {
+    const count = Number(cacheInfo.native_page_count || 0);
+    return count
+      ? `<span class="section-cache-label" title="${count.toLocaleString()} cached native OneNote page${count === 1 ? "" : "s"} in this section">page ${count.toLocaleString()}</span>`
+      : "";
+  }
+  if (state.cacheFilter === "cached-pdfs") {
+    const count = Number(cacheInfo.pdf_page_count || 0);
+    return count
+      ? `<span class="section-cache-label" title="${count.toLocaleString()} page${count === 1 ? "" : "s"} with downloaded cached PDFs in this section">PDF ${count.toLocaleString()}</span>`
+      : "";
+  }
+  const count = Number(cacheInfo.resource_page_count || 0);
+  return count
+    ? `<span class="section-cache-label subtle" title="${count.toLocaleString()} page${count === 1 ? "" : "s"} with cached resource metadata in this section">${count.toLocaleString()}</span>`
+    : "";
+}
+
+function sectionColor(section) {
+  const palette = ["#0b7a75", "#9b5de5", "#d97706", "#2563eb", "#c2410c", "#16835f", "#be185d", "#4f46e5", "#64748b"];
+  const value = section.id || section.displayName || "";
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return palette[hash % palette.length];
 }
 
 async function selectSection(sectionId, { refresh = false } = {}) {
@@ -1060,6 +1102,14 @@ function setShowDates(show) {
   applyPanelDisplaySettings();
 }
 
+function setSectionColors(show) {
+  state.showSectionColors = show;
+  localStorage.setItem("onenote-section-colors", show ? "1" : "0");
+  sectionColorsButton.classList.toggle("active", show);
+  sectionColorsButton.textContent = show ? "Section Colors On" : "Section Colors";
+  renderSections();
+}
+
 function applyPanelDisplaySettings() {
   const base = 14 + state.panelFontStep;
   const meta = Math.max(10, base - 2);
@@ -1068,6 +1118,8 @@ function applyPanelDisplaySettings() {
   document.body.classList.toggle("hide-dates", !state.showDates);
   toggleDatesButton.classList.toggle("active", state.showDates);
   toggleDatesButton.textContent = state.showDates ? "Dates On" : "Dates Off";
+  sectionColorsButton.classList.toggle("active", state.showSectionColors);
+  sectionColorsButton.textContent = state.showSectionColors ? "Section Colors On" : "Section Colors";
 }
 
 function readLayout() {

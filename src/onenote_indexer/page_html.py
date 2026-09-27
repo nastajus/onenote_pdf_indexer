@@ -51,6 +51,20 @@ def extract_resources(html: str) -> list[PageResource]:
     return parser.resources
 
 
+class OneNoteLayoutAnalyzer(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.absolute_text_boxes = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
+        if tag in {"img", "html", "head", "body", "meta", "title"}:
+            return
+        attr = {key.lower(): value for key, value in attrs if value}
+        if _style_number(attr.get("style", ""), "top") is not None:
+            self.absolute_text_boxes += 1
+
+
 class OneNoteHtmlRenderer(HTMLParser):
     allowed_tags = {
         "a",
@@ -109,11 +123,12 @@ class OneNoteHtmlRenderer(HTMLParser):
         "width",
     }
 
-    def __init__(self) -> None:
+    def __init__(self, *, reflow_absolute: bool = False) -> None:
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
         self.drop_depth = 0
         self.max_bottom = 0.0
+        self.reflow_absolute = reflow_absolute
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
@@ -131,20 +146,26 @@ class OneNoteHtmlRenderer(HTMLParser):
         attr = {key.lower(): value for key, value in attrs if value}
         rendered_attrs: list[str] = []
         was_absolute = _style_number(attr.get("style", ""), "top") is not None
+        should_reflow = was_absolute and self.reflow_absolute
         if tag == "img":
             url = attr.get("data-fullres-src") or attr.get("src")
             if not url:
                 return
             kind = "image-fullres" if attr.get("data-fullres-src") else "image"
             classes = ["onenote-resource-image"]
-            classes.append("onenote-abs-image" if was_absolute else "onenote-inline-image")
+            classes.append("onenote-inline-image" if should_reflow or not was_absolute else "onenote-abs-image")
+            if should_reflow:
+                classes.append("onenote-reflowed-image")
             rendered_attrs.append(f'src="{escape(_resource_url(url, kind), quote=True)}"')
             rendered_attrs.append(f'alt="{escape(attr.get("alt", ""), quote=True)}"')
             rendered_attrs.append('loading="lazy"')
             rendered_attrs.append(f'class="{" ".join(classes)}"')
-            self._track_absolute_bottom(attr)
-        elif was_absolute:
+            if not should_reflow:
+                self._track_absolute_bottom(attr)
+        elif should_reflow:
             rendered_attrs.append('class="onenote-reflowed-box"')
+        elif was_absolute:
+            rendered_attrs.append('class="onenote-positioned-box"')
 
         for key, value in attr.items():
             if key in {"src", "data-fullres-src", "data-src", "class", "onclick", "onerror", "onload"}:
@@ -152,7 +173,7 @@ class OneNoteHtmlRenderer(HTMLParser):
             if tag == "img" and key == "alt":
                 continue
             if key == "style":
-                style = _sanitize_style(value, allow_position=tag == "img")
+                style = _sanitize_style(value, allow_position=was_absolute and not should_reflow)
                 if style:
                     rendered_attrs.append(f'style="{escape(style, quote=True)}"')
                 continue
@@ -216,7 +237,9 @@ class OneNoteHtmlRenderer(HTMLParser):
 
 
 def render_onenote_html(html: str) -> str:
-    parser = OneNoteHtmlRenderer()
+    analyzer = OneNoteLayoutAnalyzer()
+    analyzer.feed(html)
+    parser = OneNoteHtmlRenderer(reflow_absolute=analyzer.absolute_text_boxes > 0)
     parser.feed(html)
     rendered = "".join(parser.parts)
     if parser.max_bottom:

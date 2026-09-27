@@ -64,6 +64,8 @@ class OneNoteWebHandler(BaseHTTPRequestHandler):
                 if force or not sections:
                     sections = get_graph().sections()
                     cache.replace_collection(db, "sections", sections)
+                for section in sections:
+                    section["_cache"] = _section_cache_summary(db, section["id"])
                 self._send_json(sections)
                 return
 
@@ -338,6 +340,27 @@ def _page_cache_summary(db, resources: list[dict[str, Any]]) -> dict[str, int | 
         "pdf_blob_count": pdf_blob_count,
         "image_count": image_count,
         "native_hint": bool(resources and pdf_count == 0),
+    }
+
+
+def _section_cache_summary(db, section_id: str) -> dict[str, int]:
+    pages = cache.get_pages(db, section_id)
+    native_pages = 0
+    pdf_pages = 0
+    resource_pages = 0
+    for page in pages:
+        summary = _page_cache_summary(db, cache.get_resources(db, page["id"]))
+        if summary["resource_count"]:
+            resource_pages += 1
+        if summary["pdf_blob_count"]:
+            pdf_pages += 1
+        if summary["resource_count"] and not summary["pdf_count"]:
+            native_pages += 1
+    return {
+        "page_count": len(pages),
+        "resource_page_count": resource_pages,
+        "native_page_count": native_pages,
+        "pdf_page_count": pdf_pages,
     }
 
 

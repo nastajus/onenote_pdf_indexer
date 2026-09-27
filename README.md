@@ -85,9 +85,10 @@ Other debug options:
 - Use **Reset Layout** to restore the default column layout and reopen collapsed panels.
 - The bottom sort controls can preserve the OneNote/Graph order or sort sections/pages by title, date, or PDF/cache status.
 - The bottom cache filter can show all pages, only locally downloaded PDFs, or only cached native OneNote-style pages.
+- Section cache badges summarize locally known cached pages/PDFs, and section edge colors can be toggled from the bottom controls.
 - A diamond marker on a page means embedded resources for that page are cached locally.
 - Page preview uses the original embedded PDF for PDF-dominant pages so text selection and PDF antialiasing remain available. Native OneNote-style pages use sanitized OneNote HTML.
-- Native OneNote text boxes that Graph exports as absolute-positioned blocks are reflowed automatically to prevent paragraph overlap from browser font/wrapping differences.
+- Native OneNote pages that mix absolute-positioned text boxes with images are reflowed as a whole to prevent browser font/wrapping differences from making text and images collide.
 - Stale OneNote/Graph resource `404` responses are handled gracefully; cached resources are used first, missing refreshed resources are pruned, and page-content failures retry alternate cached Graph URLs before showing diagnostics.
 
 Use **Refresh** to force a fresh Graph fetch for notebooks, sections, and the selected section. OneNote/Graph can still take a short while to reflect newly created or deleted notebooks after OneDrive/OneNote sync.
