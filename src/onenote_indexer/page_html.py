@@ -130,24 +130,31 @@ class OneNoteHtmlRenderer(HTMLParser):
 
         attr = {key.lower(): value for key, value in attrs if value}
         rendered_attrs: list[str] = []
+        was_absolute = _style_number(attr.get("style", ""), "top") is not None
         if tag == "img":
             url = attr.get("data-fullres-src") or attr.get("src")
             if not url:
                 return
             kind = "image-fullres" if attr.get("data-fullres-src") else "image"
-            is_absolute = _style_number(attr.get("style", ""), "top") is not None
             classes = ["onenote-resource-image"]
-            classes.append("onenote-abs-image" if is_absolute else "onenote-inline-image")
+            classes.append("onenote-abs-image" if was_absolute else "onenote-inline-image")
             rendered_attrs.append(f'src="{escape(_resource_url(url, kind), quote=True)}"')
             rendered_attrs.append(f'alt="{escape(attr.get("alt", ""), quote=True)}"')
             rendered_attrs.append('loading="lazy"')
             rendered_attrs.append(f'class="{" ".join(classes)}"')
             self._track_absolute_bottom(attr)
+        elif was_absolute:
+            rendered_attrs.append('class="onenote-reflowed-box"')
 
         for key, value in attr.items():
             if key in {"src", "data-fullres-src", "data-src", "class", "onclick", "onerror", "onload"}:
                 continue
             if tag == "img" and key == "alt":
+                continue
+            if key == "style":
+                style = _sanitize_style(value, allow_position=tag == "img")
+                if style:
+                    rendered_attrs.append(f'style="{escape(style, quote=True)}"')
                 continue
             if key == "href":
                 rendered_attrs.append(f'href="{escape(value, quote=True)}"')
@@ -232,3 +239,21 @@ def _number(value: str | None) -> float | None:
         return None
     match = re.match(r"\s*(-?\d+(?:\.\d+)?)", value)
     return float(match.group(1)) if match else None
+
+
+def _sanitize_style(style: str, *, allow_position: bool) -> str:
+    blocked = {"z-index", "transform"}
+    if not allow_position:
+        blocked.update({"position", "left", "top", "right", "bottom"})
+
+    declarations: list[str] = []
+    for raw_part in style.split(";"):
+        if ":" not in raw_part:
+            continue
+        name, value = raw_part.split(":", 1)
+        name = name.strip().lower()
+        value = value.strip()
+        if not name or not value or name in blocked:
+            continue
+        declarations.append(f"{name}:{value}")
+    return ";".join(declarations)

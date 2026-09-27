@@ -87,6 +87,7 @@ Other debug options:
 - The bottom cache filter can show all pages, only locally downloaded PDFs, or only cached native OneNote-style pages.
 - A diamond marker on a page means embedded resources for that page are cached locally.
 - Page preview uses the original embedded PDF for PDF-dominant pages so text selection and PDF antialiasing remain available. Native OneNote-style pages use sanitized OneNote HTML.
+- Native OneNote text boxes that Graph exports as absolute-positioned blocks are reflowed automatically to prevent paragraph overlap from browser font/wrapping differences.
 - Stale OneNote/Graph resource `404` responses are handled gracefully; cached resources are used first, missing refreshed resources are pruned, and page-content failures retry alternate cached Graph URLs before showing diagnostics.
 
 Use **Refresh** to force a fresh Graph fetch for notebooks, sections, and the selected section. OneNote/Graph can still take a short while to reflect newly created or deleted notebooks after OneDrive/OneNote sync.

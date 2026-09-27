@@ -858,6 +858,12 @@ function buildOneNotePreviewDocument(page, html, counts) {
   .onenote-body [style*="position: absolute"] {
     max-width: calc(100% - 24px) !important;
   }
+  .onenote-reflowed-box {
+    display: block;
+    margin: 0 0 14px;
+    max-width: min(100%, 960px) !important;
+    position: static !important;
+  }
   .onenote-body table {
     border-collapse: collapse;
     max-width: 100%;
