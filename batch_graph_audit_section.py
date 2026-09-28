@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 import time
 from pathlib import Path
 from urllib.parse import quote
@@ -183,6 +184,9 @@ def write_outputs(summary: dict, page_rows: list[dict], out_dir: Path, prefix: s
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--section", required=True)
     parser.add_argument("--source-order-json", required=True)
