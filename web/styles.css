@@ -112,6 +112,31 @@ select {
   margin-bottom: 16px;
 }
 
+.workspace-tabs {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  margin: -4px 0 14px;
+}
+
+.workspace-tab {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  color: var(--text);
+  min-width: 92px;
+}
+
+.workspace-tab:hover,
+.workspace-tab.active {
+  background: #eef6ff;
+  border-color: var(--accent);
+  color: var(--accent-dark);
+}
+
+.hidden {
+  display: none !important;
+}
+
 .grid {
   display: grid;
   grid-template-columns:
@@ -440,6 +465,100 @@ button.item.active {
   margin-top: 4px;
 }
 
+.search-workspace {
+  display: grid;
+  gap: 12px;
+}
+
+.search-control-panel,
+.search-results-panel,
+.search-viewer-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.search-input-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(260px, 1fr) auto;
+}
+
+.search-options {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.search-layout {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(520px, 1.7fr);
+}
+
+.search-results-panel,
+.search-viewer-panel {
+  min-height: calc(100vh - 250px);
+}
+
+.search-results-list {
+  color: var(--muted);
+  display: grid;
+  gap: 12px;
+}
+
+.search-section-group {
+  border-left: 4px solid var(--accent);
+  display: grid;
+  gap: 7px;
+  padding-left: 10px;
+}
+
+.search-section-heading {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.search-hit-card {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.search-hit-card:hover,
+.search-hit-card.active {
+  background: #f8fbff;
+  border-color: var(--accent);
+}
+
+.search-hit-card mark,
+.snippet-mark {
+  background: rgba(245, 158, 11, 0.28);
+  border-radius: 3px;
+  color: inherit;
+  padding: 0 2px;
+}
+
+.pdf-match-viewer {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  height: calc(100vh - 300px);
+  min-height: 720px;
+  width: 100%;
+}
+
 .diagnostic-list {
   display: grid;
   gap: 5px;
@@ -534,6 +653,10 @@ button.item.active {
     grid-template-columns: 1fr;
   }
 
+  .search-layout {
+    grid-template-columns: 1fr;
+  }
+
   .splitter {
     display: none;
   }
@@ -554,5 +677,12 @@ button.item.active {
   .control-dock {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .search-input-row,
+  .search-options {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: 1fr;
   }
 }

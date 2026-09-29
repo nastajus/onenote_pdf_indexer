@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PDF Match Viewer</title>
+    <link rel="stylesheet" href="/pdf_viewer.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  </head>
+  <body>
+    <main class="viewer-shell">
+      <header class="viewer-toolbar">
+        <div class="viewer-title">
+          <strong id="viewerTitle">PDF Match Viewer</strong>
+          <span id="viewerStatus">Loading...</span>
+        </div>
+        <div class="viewer-controls">
+          <button id="prevPageButton" type="button" title="Previous page">&#8249;</button>
+          <input id="pageInput" type="number" min="1" value="1" title="PDF page number" />
+          <span id="pageTotal">/ ?</span>
+          <button id="nextPageButton" type="button" title="Next page">&#8250;</button>
+          <button id="zoomOutButton" type="button" title="Zoom out">-</button>
+          <span id="zoomLabel">100%</span>
+          <button id="zoomInButton" type="button" title="Zoom in">+</button>
+          <button id="fitWidthButton" type="button" title="Fit to width">&#9633;</button>
+          <button id="prevMatchButton" type="button" title="Previous match">&#9651;</button>
+          <button id="nextMatchButton" type="button" title="Next match">&#9661;</button>
+        </div>
+      </header>
+
+      <section id="pageHost" class="page-host" aria-label="PDF page">
+        <div id="pageFrame" class="page-frame">
+          <canvas id="pdfCanvas"></canvas>
+          <div id="textLayer" class="text-layer"></div>
+          <div id="highlightLayer" class="highlight-layer" aria-hidden="true"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/pdf_viewer.js"></script>
+  </body>
+</html>

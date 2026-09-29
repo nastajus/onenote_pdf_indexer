@@ -16,11 +16,16 @@
         <button id="refreshButton" type="button">Refresh</button>
       </header>
 
-      <section class="toolbar" aria-label="Search controls">
+      <nav class="workspace-tabs" aria-label="Workspace">
+        <button id="browseTabButton" class="workspace-tab active" type="button">Browse</button>
+        <button id="searchTabButton" class="workspace-tab" type="button">Search</button>
+      </nav>
+
+      <section class="toolbar browse-workspace" aria-label="Search controls">
         <input id="queryInput" type="search" placeholder="Filter page titles in the selected section" />
       </section>
 
-      <section class="grid">
+      <section class="grid browse-workspace">
         <aside class="panel" data-panel="left">
           <button class="panel-rail" data-expand-panel="left" type="button" title="Show notebooks and sections">Library &#8250;</button>
           <div class="panel-content">
@@ -62,7 +67,41 @@
         </section>
       </section>
 
-      <section class="control-dock" aria-label="View controls">
+      <section id="searchWorkspace" class="search-workspace hidden" aria-label="Global PDF search">
+        <section class="search-control-panel">
+          <div class="search-input-row">
+            <input id="globalSearchInput" type="search" placeholder="Search cached PDF text across the whole library" />
+            <button id="globalSearchButton" type="button">Search</button>
+          </div>
+          <div class="search-options">
+            <label class="select-control" title="Choose global library search or limit results to the selected Browse section">
+              <span>Scope</span>
+              <select id="globalSearchScope">
+                <option value="all">All sections</option>
+                <option value="selected">Selected Browse section</option>
+              </select>
+            </label>
+            <span id="globalSearchStatus" class="item-meta">Search uses cached extracted PDF text.</span>
+          </div>
+        </section>
+
+        <section class="search-layout">
+          <aside class="search-results-panel">
+            <div class="panel-titlebar">
+              <h2>Results <span id="globalSearchCount" class="list-count">0</span></h2>
+            </div>
+            <div id="globalSearchResults" class="search-results-list">Enter a search term to search cached PDF text.</div>
+          </aside>
+          <section class="search-viewer-panel">
+            <div class="panel-titlebar">
+              <h2>PDF Match Viewer</h2>
+            </div>
+            <iframe id="pdfMatchViewer" class="pdf-match-viewer" title="PDF match viewer"></iframe>
+          </section>
+        </section>
+      </section>
+
+      <section class="control-dock browse-workspace" aria-label="View controls">
         <div class="control-group" role="group" aria-label="Resource view mode">
           <button id="viewAnyButton" class="mode-button active" type="button" title="Show PDF when available, otherwise show the OneNote page preview">
             <span aria-hidden="true">&#9672;</span>

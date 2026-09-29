@@ -13,6 +13,7 @@ const state = {
   selectedPage: null,
   pages: [],
   resources: [],
+  activeWorkspace: localStorage.getItem("onenote-workspace") || "browse",
   viewMode: localStorage.getItem("onenote-view-mode") || "any",
   searchPdfContent: localStorage.getItem("onenote-search-pdf") === "1",
   showDates: localStorage.getItem("onenote-show-dates") !== "0",
@@ -24,6 +25,9 @@ const state = {
   isRefreshingMetadata: false,
   lastMetadataRefresh: 0,
   searchResults: [],
+  globalSearchResults: [],
+  selectedGlobalResultKey: null,
+  globalSearchTimer: null,
   searchTimer: null,
   collapsedPanels: JSON.parse(localStorage.getItem("onenote-collapsed-panels") || "{}"),
 };
@@ -35,6 +39,17 @@ const pagesList = document.querySelector("#pagesList");
 const resourcesList = document.querySelector("#resourcesList");
 const queryInput = document.querySelector("#queryInput");
 const grid = document.querySelector(".grid");
+const browseTabButton = document.querySelector("#browseTabButton");
+const searchTabButton = document.querySelector("#searchTabButton");
+const browseWorkspaceNodes = document.querySelectorAll(".browse-workspace");
+const searchWorkspace = document.querySelector("#searchWorkspace");
+const globalSearchInput = document.querySelector("#globalSearchInput");
+const globalSearchButton = document.querySelector("#globalSearchButton");
+const globalSearchScope = document.querySelector("#globalSearchScope");
+const globalSearchStatus = document.querySelector("#globalSearchStatus");
+const globalSearchCount = document.querySelector("#globalSearchCount");
+const globalSearchResults = document.querySelector("#globalSearchResults");
+const pdfMatchViewer = document.querySelector("#pdfMatchViewer");
 const viewAnyButton = document.querySelector("#viewAnyButton");
 const viewPdfButton = document.querySelector("#viewPdfButton");
 const viewTextButton = document.querySelector("#viewTextButton");
@@ -60,8 +75,37 @@ document.querySelector("#refreshButton").addEventListener("click", () => {
   loadBasics({ refresh: true });
 });
 
+browseTabButton.addEventListener("click", () => {
+  setWorkspace("browse");
+});
+
+searchTabButton.addEventListener("click", () => {
+  setWorkspace("search");
+});
+
 queryInput.addEventListener("input", () => {
   handleQueryInput();
+});
+
+globalSearchInput.addEventListener("input", () => {
+  handleGlobalSearchInput();
+});
+
+globalSearchInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    loadGlobalSearch(globalSearchInput.value.trim());
+  }
+});
+
+globalSearchButton.addEventListener("click", () => {
+  loadGlobalSearch(globalSearchInput.value.trim());
+});
+
+globalSearchScope.addEventListener("change", () => {
+  if (globalSearchInput.value.trim().length >= 2) {
+    loadGlobalSearch(globalSearchInput.value.trim());
+  }
 });
 
 viewAnyButton.addEventListener("click", () => {
@@ -180,6 +224,22 @@ function escapeHtml(value) {
 
 function renderError(container, error) {
   container.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+}
+
+function setWorkspace(workspace) {
+  if (!["browse", "search"].includes(workspace)) {
+    workspace = "browse";
+  }
+  state.activeWorkspace = workspace;
+  localStorage.setItem("onenote-workspace", workspace);
+  browseTabButton.classList.toggle("active", workspace === "browse");
+  searchTabButton.classList.toggle("active", workspace === "search");
+  browseWorkspaceNodes.forEach((node) => node.classList.toggle("hidden", workspace !== "browse"));
+  searchWorkspace.classList.toggle("hidden", workspace !== "search");
+  if (workspace === "search") {
+    globalSearchInput.focus();
+    renderGlobalSearchResults();
+  }
 }
 
 function orderedNotebooks(notebooks = state.notebooks) {
@@ -546,6 +606,174 @@ async function loadPdfSearch(query) {
   } catch (error) {
     renderError(pagesList, error);
   }
+}
+
+function handleGlobalSearchInput() {
+  window.clearTimeout(state.globalSearchTimer);
+  const query = globalSearchInput.value.trim();
+  if (query.length < 2) {
+    state.globalSearchResults = [];
+    state.selectedGlobalResultKey = null;
+    globalSearchStatus.textContent = "Search uses cached extracted PDF text.";
+    renderGlobalSearchResults();
+    return;
+  }
+
+  globalSearchStatus.textContent = "Searching cached PDF text...";
+  state.globalSearchTimer = window.setTimeout(() => {
+    loadGlobalSearch(query);
+  }, 260);
+}
+
+async function loadGlobalSearch(query) {
+  if (query.length < 2) {
+    state.globalSearchResults = [];
+    renderGlobalSearchResults();
+    return;
+  }
+
+  const params = new URLSearchParams({ q: query, limit: "200" });
+  if (globalSearchScope.value === "selected" && state.selectedSectionId) {
+    params.set("section_id", state.selectedSectionId);
+  }
+
+  globalSearchStatus.textContent = "Searching cached PDF text...";
+  try {
+    const payload = await api(`/api/search?${params}`);
+    if (query !== globalSearchInput.value.trim()) {
+      return;
+    }
+    state.globalSearchResults = payload.results || [];
+    globalSearchStatus.textContent = `${state.globalSearchResults.length.toLocaleString()} hits from ${Number(payload.indexed_rows || 0).toLocaleString()} indexed PDF pages.`;
+    renderGlobalSearchResults();
+  } catch (error) {
+    state.globalSearchResults = [];
+    globalSearchStatus.innerHTML = `<span class="error">${escapeHtml(error.message)}</span>`;
+    renderGlobalSearchResults();
+  }
+}
+
+function renderGlobalSearchResults() {
+  const results = state.globalSearchResults || [];
+  globalSearchCount.textContent = results.length.toLocaleString();
+  if (!results.length) {
+    const query = globalSearchInput.value.trim();
+    globalSearchResults.textContent = query.length >= 2
+      ? "No cached PDF text matches this search."
+      : "Enter a search term to search cached PDF text.";
+    return;
+  }
+
+  const groups = groupSearchResults(results);
+  globalSearchResults.innerHTML = "";
+  for (const group of groups) {
+    const sectionEl = document.createElement("section");
+    sectionEl.className = "search-section-group";
+    sectionEl.innerHTML = `
+      <div class="search-section-heading">${escapeHtml(group.sectionName)}</div>
+    `;
+
+    for (const result of group.results) {
+      const page = result.page || {};
+      const resource = result.resource || {};
+      const pageNumber = result.pdf_page_number || "?";
+      const key = searchResultKey(result);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `search-hit-card${key === state.selectedGlobalResultKey ? " active" : ""}`;
+      button.innerHTML = `
+        <div class="item-title">${escapeHtml(page.title || "Untitled OneNote page")}</div>
+        <div class="item-meta">${escapeHtml(resourceLabel(resource, result.resource_url))} &middot; PDF page ${escapeHtml(pageNumber)}</div>
+        <div class="search-hit-snippet">${formatSearchSnippet(result.snippet || "", globalSearchInput.value)}</div>
+      `;
+      button.addEventListener("click", () => openSearchResult(result));
+      sectionEl.append(button);
+    }
+
+    globalSearchResults.append(sectionEl);
+  }
+}
+
+function groupSearchResults(results) {
+  const bySection = new Map();
+  for (const result of results) {
+    const sectionName = result.section?.displayName || result.page?._section?.displayName || result.section_id || "Unknown section";
+    if (!bySection.has(sectionName)) {
+      bySection.set(sectionName, []);
+    }
+    bySection.get(sectionName).push(result);
+  }
+  return [...bySection.entries()].map(([sectionName, sectionResults]) => ({
+    sectionName,
+    results: sectionResults,
+  }));
+}
+
+function openSearchResult(result) {
+  state.selectedGlobalResultKey = searchResultKey(result);
+  renderGlobalSearchResults();
+  const query = globalSearchInput.value.trim();
+  const pageNumber = Number(result.pdf_page_number || 1) || 1;
+  const params = new URLSearchParams({
+    resource_url: result.resource_url,
+    page: String(pageNumber),
+    q: query,
+    title: result.page?.title || resourceLabel(result.resource || {}, result.resource_url),
+  });
+  pdfMatchViewer.src = `/pdf_viewer.html?${params.toString()}`;
+}
+
+function searchResultKey(result) {
+  return `${result.page_id || ""}|${result.resource_url || ""}|${result.pdf_page_number || ""}|${result.snippet || ""}`;
+}
+
+function resourceLabel(resource, resourceUrl) {
+  return resource.alt || resource.name || resource.title || shortResourceUrl(resourceUrl);
+}
+
+function shortResourceUrl(resourceUrl) {
+  const value = String(resourceUrl || "");
+  if (!value) {
+    return "Embedded PDF";
+  }
+  try {
+    const decoded = decodeURIComponent(value);
+    const parts = decoded.split(/[/?#]/).filter(Boolean);
+    return parts.at(-1)?.slice(0, 80) || "Embedded PDF";
+  } catch {
+    return value.slice(0, 80);
+  }
+}
+
+function formatSearchSnippet(snippet, query) {
+  const escaped = escapeHtml(snippet)
+    .replaceAll("[", '<mark class="snippet-mark">')
+    .replaceAll("]", "</mark>");
+  if (escaped.includes("<mark")) {
+    return escaped;
+  }
+  return highlightTerms(escaped, query);
+}
+
+function highlightTerms(escapedText, query) {
+  const terms = queryTerms(query).slice(0, 8);
+  let output = escapedText;
+  for (const term of terms) {
+    const escapedTerm = escapeRegExp(escapeHtml(term));
+    output = output.replace(new RegExp(`(${escapedTerm})`, "gi"), '<mark class="snippet-mark">$1</mark>');
+  }
+  return output;
+}
+
+function queryTerms(query) {
+  const phraseMatches = [...String(query || "").matchAll(/"([^"]+)"/g)].map((match) => match[1].trim()).filter(Boolean);
+  const unquoted = String(query || "").replace(/"[^"]+"/g, " ");
+  const words = unquoted.split(/\s+/).map((term) => term.trim()).filter((term) => term.length > 1);
+  return [...phraseMatches, ...words];
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function renderPages() {
@@ -1057,7 +1285,12 @@ async function loadPdfFrame(pdf, card, options = {}) {
     const iframe = document.createElement("iframe");
     iframe.className = options.pageMode ? "pdf-frame page-pdf-frame" : "pdf-frame";
     iframe.title = "Embedded PDF";
-    iframe.src = `/api/resource?resource_url=${encodeURIComponent(pdf.url)}&kind=${encodeURIComponent(pdf.kind)}#view=FitH&zoom=page-width`;
+    const viewerParams = new URLSearchParams({
+      resource_url: pdf.url,
+      page: "1",
+      title: options.pageMode ? "Native PDF page view" : "Embedded PDF",
+    });
+    iframe.src = `/pdf_viewer.html?${viewerParams.toString()}`;
     card.append(iframe);
     if (state.selectedPage) {
       state.selectedPage._cache = {
@@ -1295,6 +1528,7 @@ sectionSortSelect.value = state.sectionSort;
 pageSortSelect.value = state.pageSort;
 cacheFilterSelect.value = state.cacheFilter;
 setupSplitters();
+setWorkspace(state.activeWorkspace);
 setViewMode(state.viewMode);
 setPdfSearchMode(state.searchPdfContent);
 loadBasics();

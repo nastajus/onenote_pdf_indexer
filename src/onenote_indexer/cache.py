@@ -139,6 +139,14 @@ def get_resources(db: sqlite3.Connection, page_id: str) -> list[dict[str, Any]]:
     return [json.loads(row["data"]) for row in rows]
 
 
+def get_resource(db: sqlite3.Connection, page_id: str, resource_url: str) -> dict[str, Any] | None:
+    row = db.execute(
+        "select data from resources where page_id = ? and url = ?",
+        (page_id, resource_url),
+    ).fetchone()
+    return json.loads(row["data"]) if row else None
+
+
 def resource_count(db: sqlite3.Connection, page_id: str) -> int:
     row = db.execute(
         "select count(*) as count from resources where page_id = ?",
@@ -252,9 +260,14 @@ def search_pdf_text(db: sqlite3.Connection, query: str, *, section_id: str | Non
                 f.resource_url,
                 f.pdf_page_number,
                 snippet(pdf_pages_fts, 3, '[', ']', ' ... ', 18) as snippet,
-                p.data as page_data
+                p.data as page_data,
+                p.section_id,
+                s.data as section_data,
+                r.data as resource_data
             from pdf_pages_fts f
             left join pages p on p.id = f.page_id
+            left join sections s on s.id = p.section_id
+            left join resources r on r.page_id = f.page_id and r.url = f.resource_url
             where f.text match ?
         """
         params: list[Any] = [match_query]
@@ -270,13 +283,18 @@ def search_pdf_text(db: sqlite3.Connection, query: str, *, section_id: str | Non
     results: list[dict[str, Any]] = []
     for row in rows:
         page_data = json.loads(row["page_data"]) if row["page_data"] else {}
+        section_data = json.loads(row["section_data"]) if _row_has_key(row, "section_data") and row["section_data"] else {}
+        resource_data = json.loads(row["resource_data"]) if _row_has_key(row, "resource_data") and row["resource_data"] else {}
         results.append(
             {
                 "page_id": row["page_id"],
+                "section_id": row["section_id"] if _row_has_key(row, "section_id") else page_data.get("parentSection", {}).get("id"),
                 "resource_url": row["resource_url"],
                 "pdf_page_number": row["pdf_page_number"],
                 "snippet": row["snippet"],
                 "page": page_data,
+                "section": section_data,
+                "resource": resource_data,
             }
         )
     return results
@@ -297,9 +315,14 @@ def _search_pdf_text_like(db: sqlite3.Connection, query: str, *, section_id: str
             f.resource_url,
             f.pdf_page_number,
             substr(f.text, 1, 500) as snippet,
-            p.data as page_data
+            p.data as page_data,
+            p.section_id,
+            s.data as section_data,
+            r.data as resource_data
         from pdf_pages_fts f
         left join pages p on p.id = f.page_id
+        left join sections s on s.id = p.section_id
+        left join resources r on r.page_id = f.page_id and r.url = f.resource_url
         where f.text like ?
     """
     params: list[Any] = [f"%{query}%"]
@@ -314,6 +337,10 @@ def _search_pdf_text_like(db: sqlite3.Connection, query: str, *, section_id: str
 def _fts_query(query: str) -> str:
     terms = [term.strip().replace('"', '""') for term in query.split() if term.strip()]
     return " ".join(f'"{term}"' for term in terms)
+
+
+def _row_has_key(row: sqlite3.Row, key: str) -> bool:
+    return key in row.keys()
 
 
 def get_resource_blob(db: sqlite3.Connection, url: str) -> dict[str, Any] | None:
