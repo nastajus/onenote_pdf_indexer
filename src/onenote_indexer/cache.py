@@ -156,11 +156,20 @@ def resource_count(db: sqlite3.Connection, page_id: str) -> int:
 
 
 def replace_resources(db: sqlite3.Connection, page_id: str, resources: list[dict[str, Any]]) -> None:
+    unique_resources: dict[str, dict[str, Any]] = {}
+    for resource in resources:
+        url = str(resource.get("url") or "").strip()
+        if url and url not in unique_resources:
+            unique_resources[url] = resource
+
     with db:
         db.execute("delete from resources where page_id = ?", (page_id,))
         db.executemany(
             "insert into resources (page_id, url, data) values (?, ?, ?)",
-            [(page_id, resource["url"], json.dumps(resource, ensure_ascii=False)) for resource in resources],
+            [
+                (page_id, url, json.dumps(resource, ensure_ascii=False))
+                for url, resource in unique_resources.items()
+            ],
         )
 
 
