@@ -4,6 +4,8 @@ from typing import Any, Iterable
 from urllib.parse import quote
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 GRAPH_ROOT = "https://graph.microsoft.com/v1.0"
@@ -12,6 +14,18 @@ GRAPH_ROOT = "https://graph.microsoft.com/v1.0"
 class GraphClient:
     def __init__(self, access_token: str):
         self.session = requests.Session()
+        retry = Retry(
+            total=6,
+            connect=3,
+            read=3,
+            status=6,
+            backoff_factor=2,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset({"GET"}),
+            respect_retry_after_header=True,
+            raise_on_status=False,
+        )
+        self.session.mount("https://", HTTPAdapter(max_retries=retry))
         self.session.headers.update(
             {
                 "Authorization": f"Bearer {access_token}",
