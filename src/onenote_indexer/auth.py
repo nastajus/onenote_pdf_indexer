@@ -32,6 +32,7 @@ def get_access_token(
     *,
     force_interactive: bool = False,
     device_code: bool = False,
+    login_hint: str | None = None,
 ) -> str:
     cache = _load_cache()
     runtime_scopes = [
@@ -58,9 +59,12 @@ def get_access_token(
         result = app.acquire_token_by_device_flow(flow)
 
     if not result:
-        result = app.acquire_token_interactive(
-            scopes=runtime_scopes,
-        )
+        interactive_options: dict[str, Any] = {}
+        if force_interactive:
+            interactive_options["prompt"] = "select_account"
+        if login_hint:
+            interactive_options["login_hint"] = login_hint
+        result = app.acquire_token_interactive(scopes=runtime_scopes, **interactive_options)
 
     _save_cache(cache)
 

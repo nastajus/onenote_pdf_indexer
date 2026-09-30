@@ -32,6 +32,12 @@ If the browser redirect gets stuck, use device-code login:
 .\.venv\Scripts\python.exe -m onenote_indexer whoami --device-code --force-login
 ```
 
+When several Microsoft accounts are present, force the account chooser and preselect the intended identity:
+
+```powershell
+.\.venv\Scripts\python.exe -m onenote_indexer whoami --force-login --login-hint "name@example.com"
+```
+
 Inspect embedded resources on a page:
 
 ```powershell

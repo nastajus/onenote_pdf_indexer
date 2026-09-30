@@ -34,6 +34,7 @@ def main() -> None:
     parser.add_argument("--json", action="store_true", help="Print raw JSON.")
     parser.add_argument("--force-login", action="store_true", help="Ignore cached tokens and sign in again.")
     parser.add_argument("--device-code", action="store_true", help="Use a device-code login instead of browser callback.")
+    parser.add_argument("--login-hint", help="Preselect this account during interactive browser sign-in.")
     args = parser.parse_args()
 
     config = load_config()
@@ -41,6 +42,7 @@ def main() -> None:
         config,
         force_interactive=args.force_login or args.command == "auth",
         device_code=args.device_code,
+        login_hint=args.login_hint,
     )
 
     if args.command == "auth":
