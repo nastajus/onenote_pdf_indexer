@@ -119,6 +119,15 @@ Useful variants:
 .\.venv\Scripts\python.exe -m onenote_indexer warm-cache --refresh-metadata
 ```
 
+If Microsoft Graph throttles a large run, schedule slow resumable passes after a cooldown:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\resume_warm_cache.ps1
+Get-Content .\data\warm-cache-resume.log -Wait
+```
+
+The helper waits 20 minutes by default, uses a five-second request delay, and makes three passes with 30-minute gaps. Existing downloads are skipped.
+
 ## Git Checkpoints
 
 Project-local Git automation lives at:
