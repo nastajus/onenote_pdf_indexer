@@ -1,5 +1,6 @@
 param(
-    [string]$Message = "Codex checkpoint"
+    [string]$Message = "Codex checkpoint",
+    [switch]$NoPush
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,7 +38,31 @@ if (-not $Email) {
 $Status = & $Git status --porcelain
 if (-not $Status) {
     Write-Host "No project changes to commit."
+} else {
+    & $Git commit -m $Message | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "Git commit failed with exit code $LASTEXITCODE."
+    }
+}
+
+if ($NoPush) {
+    Write-Host "Skipping push because -NoPush was specified."
     exit 0
 }
 
-& $Git commit -m $Message | Out-Host
+$Origin = & $Git remote get-url origin 2>$null
+if (-not $Origin) {
+    throw "No origin remote is configured; cannot push the checkpoint."
+}
+
+$Branch = & $Git branch --show-current
+if (-not $Branch) {
+    throw "The repository is in detached HEAD state; cannot choose a branch to push."
+}
+
+& $Git push --set-upstream origin $Branch | Out-Host
+if ($LASTEXITCODE -ne 0) {
+    throw "Git push failed with exit code $LASTEXITCODE."
+}
+
+Write-Host "Checkpoint pushed to origin/$Branch."
