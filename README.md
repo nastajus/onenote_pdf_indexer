@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/onenote-pdf-indexer-badge.png" alt="OneNote PDF Indexer — searchable OneNote PDF research library" width="820">
+</p>
+
 # OneNote PDF Indexer
 
 A private, local research browser for OneNote notebooks that contain embedded PDFs. It turns a large notebook into a searchable paper library while preserving the familiar notebook → section → page structure.
