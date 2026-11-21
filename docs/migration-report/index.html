@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OneNote Account Migration and Project Context</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #172033;
+        background: #eef2f7;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; line-height: 1.65; }
+      main { max-width: 980px; margin: 48px auto; padding: 0 24px 64px; }
+      article { background: #fff; border: 1px solid #dce3ee; border-radius: 18px; padding: 48px; box-shadow: 0 18px 55px rgba(27, 39, 64, .08); }
+      h1, h2, h3 { color: #101827; line-height: 1.2; }
+      h1 { margin: 0 0 8px; font-size: clamp(2rem, 5vw, 3.1rem); }
+      h2 { margin-top: 2.2em; padding-top: .4em; border-top: 1px solid #e5eaf2; }
+      .subtitle { margin: 0 0 32px; color: #5c667a; font-size: 1.08rem; }
+      .verdict { padding: 22px 24px; border-left: 5px solid #2463eb; border-radius: 8px; background: #eef5ff; font-size: 1.08rem; }
+      .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+      .card { padding: 18px 20px; border: 1px solid #dfe5ee; border-radius: 12px; background: #fbfcfe; }
+      .card h3 { margin: 0 0 8px; }
+      code { padding: .15em .38em; border-radius: 5px; background: #edf1f7; }
+      a { color: #174ea6; }
+      li + li { margin-top: .5em; }
+      .note { color: #596579; }
+      footer { margin-top: 36px; color: #667085; font-size: .92rem; }
+      @media (max-width: 680px) { article { padding: 28px 22px; } main { margin-top: 20px; padding-inline: 12px; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <article>
+        <h1>OneNote Account Migration and Project Context</h1>
+        <p class="subtitle">A private reconstruction of why the notebook moved, what the project was meant to accomplish, and what the surviving transcript can actually prove. Updated November 21, 2026.</p>
+
+        <p class="verdict"><strong>Bottom line:</strong> moving the notebook from the University of Toronto Microsoft 365 account to Samira’s personal Microsoft account was <strong>not inherently required by the Microsoft Graph OneNote API</strong>. Graph supports notebooks in both personal and organizational accounts. The migration was nevertheless a practical way to remove institutional consent and account-lifecycle constraints, and it was required by this project’s current personal-account-only authentication configuration unless that configuration was changed.</p>
+
+        <h2>What the Original Project Was For</h2>
+        <p>The notebook was functioning as a structured research-paper library: OneNote sections organized topics, OneNote pages held individual papers or related notes, and the papers themselves were embedded PDFs. The core problem was not simply synchronization. It was that browsing and searching many embedded papers through OneNote was too slow and fragmented.</p>
+        <p>The intended custom system was meant to preserve OneNote’s organization while adding capabilities that OneNote did not provide cleanly:</p>
+        <ul>
+          <li>search PDF contents across the entire library;</li>
+          <li>identify the OneNote section and page containing each result;</li>
+          <li>identify the exact PDF page containing the match;</li>
+          <li>open the original PDF at the match with visible highlights and selectable text;</li>
+          <li>eventually answer natural-language questions from retrieved passages with source citations.</li>
+        </ul>
+
+        <h2>What Was Actually Implemented</h2>
+        <div class="status-grid">
+          <section class="card">
+            <h3>Implemented</h3>
+            <p>Notebook/section/page browsing, local PDF caching, page-level text extraction, global search, grouped results, PDF-page navigation, and selectable PDF.js highlights.</p>
+          </section>
+          <section class="card">
+            <h3>Still Planned</h3>
+            <p>OCR for image-only printouts, stronger ranking and query syntax, and an embedded AI assistant that answers from controlled retrieval context with citations.</p>
+          </section>
+        </div>
+
+        <h2>Was the Personal-Account Migration Necessary?</h2>
+        <h3>Not as a Microsoft Graph requirement</h3>
+        <p>Microsoft states that the OneNote Graph API can access notebooks in a <em>personal or organization account</em>, including consumer OneDrive and OneDrive for Business. The delegated <code>Notes.Read</code> permission is the correct read-only scope for the signed-in user’s notebooks. In principle, the application could therefore have remained connected to the U of T notebook.</p>
+
+        <h3>But the current application is configured for personal accounts only</h3>
+        <p>The repository’s example configuration uses <code>https://login.microsoftonline.com/consumers</code>. Microsoft defines that authority as accepting personal Microsoft accounts only. A U of T work/school identity cannot authenticate through it. Keeping the institutional account would have required an app registration whose supported account types included organizational accounts and an authority such as the U of T tenant, <code>organizations</code>, or <code>common</code>.</p>
+
+        <h3>Institutional policy could still have blocked the alternative</h3>
+        <p>Organizational tenants can restrict whether users may consent to applications. Even permissions that do not normally require administrator consent can be subject to tenant consent policies, risk controls, app-assignment requirements, or an admin-consent workflow. The surviving transcript says the U of T access was restricted, but it does not preserve the exact error or policy response. It therefore cannot prove that migration was the only possible solution; it can only show that migration was the solution that successfully removed the dependency.</p>
+
+        <h3>What the migration bought in practice</h3>
+        <ul>
+          <li>control over the Entra app registration and consent path;</li>
+          <li>notebook ownership independent of university account policy;</li>
+          <li>continuity if institutional access, licensing, or enrollment later changes;</li>
+          <li>a predictable personal-account authentication target for this local tool.</li>
+        </ul>
+        <p class="note">Those benefits explain why the migration was reasonable even though the API itself did not mandate it. The cost was the difficult, lengthy notebook transfer and synchronization process.</p>
+
+        <h2>What the Transferred Chat History Contains</h2>
+        <p>The Markdown transcript explicitly says that the earliest part of the conversation had already been compacted before it was exported. Its compacted summary records the initial connector setup, Entra permissions, notebook migration, browser UI, caching, and PDF extraction, but the original messages for those steps are not present verbatim.</p>
+        <p>The recoverable portion contains substantially more than synchronization:</p>
+        <ul>
+          <li>a detailed design for multi-PDF search grouped by section, OneNote page, PDF, and PDF page;</li>
+          <li>the decision to separate <strong>Browse</strong> and <strong>Search</strong> workflows;</li>
+          <li>the technical design for PDF.js text-coordinate mapping and non-blocking highlight overlays;</li>
+          <li>implementation and verification of the first global-search and custom-viewer pass;</li>
+          <li>a discussion of embedding the app in a webpage;</li>
+          <li>a future AI retrieval flow with citations, privacy boundaries, prompt-injection handling, cost, and latency considerations.</li>
+        </ul>
+        <p>What cannot be recovered from this file is the full nuance of Samira’s original request or the step-by-step institutional-account failure. An external conversation export or notes from the original machine would be needed for that.</p>
+
+        <h2>Best Interpretation Going Forward</h2>
+        <p>The product should be understood primarily as a <strong>local research-library interface layered over OneNote</strong>, not as a synchronization utility. Synchronization and account migration were enabling work. The user-facing objective is faster cross-paper discovery without giving up OneNote’s subject organization or the original PDFs.</p>
+        <p>A sensible next phase would build on the existing search index rather than revisit the migration:</p>
+        <ol>
+          <li>improve coverage reporting so “not found” can be distinguished from “not indexed”;</li>
+          <li>add OCR for printout-only pages;</li>
+          <li>improve relevance ranking, phrase search, and field filters;</li>
+          <li>add citation-first AI question answering over retrieved PDF-page passages.</li>
+        </ol>
+
+        <h2>Official Microsoft References</h2>
+        <ul>
+          <li><a href="https://learn.microsoft.com/en-us/graph/api/resources/onenote-api-overview?view=graph-rest-1.0">Use the OneNote REST API</a> — personal and organizational OneNote accounts, consumer OneDrive, and OneDrive for Business.</li>
+          <li><a href="https://learn.microsoft.com/en-us/graph/permissions-reference#notesread">Microsoft Graph permissions reference: Notes.Read</a> — delegated read access to the signed-in user’s OneNote notebooks.</li>
+          <li><a href="https://learn.microsoft.com/en-us/entra/identity-platform/msal-client-application-configuration">MSAL client application configuration</a> — meanings of <code>consumers</code>, <code>organizations</code>, <code>common</code>, and tenant-specific authorities.</li>
+          <li><a href="https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/user-admin-consent-overview">User and admin consent overview</a> — how organizational tenant policies can restrict user consent.</li>
+          <li><a href="https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/admin-consent-workflow-overview">Admin consent workflow</a> — the approval path when users cannot directly consent.</li>
+        </ul>
+
+        <footer>This report is intentionally separate from the public-facing README. It combines repository evidence, the surviving transcript, and official Microsoft documentation; inferences are labeled where the historical record is incomplete.</footer>
+      </article>
+    </main>
+  </body>
+</html>

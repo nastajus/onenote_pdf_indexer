@@ -1,31 +1,94 @@
 # OneNote PDF Indexer
 
-Local tooling for connecting to Microsoft Graph, reading OneNote notebook structure, and preparing a searchable PDF index.
+A private, local research browser for OneNote notebooks that contain embedded PDFs. It turns a large notebook into a searchable paper library while preserving the familiar notebook → section → page structure.
+
+## What It Does
+
+- **Browse the research library naturally.** Move from notebook to section to OneNote page, then read the associated paper without leaving the app.
+- **Search across many PDFs at once.** Find a term across the cached library instead of opening and searching papers individually.
+- **See where every result came from.** Results retain their OneNote section, OneNote page, PDF title, PDF page number, and a surrounding text snippet.
+- **Open directly at the match.** The custom PDF viewer jumps to the relevant page and overlays translucent highlights while keeping the PDF text selectable.
+- **Work from a resumable local cache.** Downloaded PDFs and extracted text remain available between sessions, and interrupted cache runs can continue without starting over.
+- **Adapt the workspace.** Resize or collapse panels, sort sections and pages, filter by cache status, and switch between PDF, extracted text, and native OneNote-style page views.
 
 ## Screenshots
 
-Browse the OneNote notebook hierarchy, inspect cached pages, and read the original embedded PDF in one workspace:
+### Browse
+
+Explore sections and pages beside the original embedded PDF:
 
 ![Browse workspace showing notebooks, sections, pages, and an embedded PDF](docs/screenshots/browse-workspace.png)
 
-Search extracted text across the full PDF library, grouped by OneNote section, with exact PDF-page navigation and selectable highlighted text:
+### Search
+
+Search the full cached library and inspect an exact highlighted PDF-page match:
 
 ![Global PDF search showing grouped matches and highlighted text in the PDF viewer](docs/screenshots/global-search.png)
 
-## Current Milestone
+## Project Status
 
-This first pass only proves that Microsoft Graph can see the OneNote notebooks/pages in the personal Microsoft account.
+The core browse-and-search workflow is functional:
+
+- Microsoft Graph authentication and OneNote discovery
+- section-by-section page loading for large notebooks
+- resumable PDF download and local caching
+- PDF text extraction and page-level full-text search
+- grouped global results with snippets and PDF page numbers
+- custom PDF.js rendering with selectable text and exact match highlights
+- native OneNote page previews when no original PDF is available
+
+Not yet implemented:
+
+- OCR for image-only OneNote printouts
+- natural-language AI answers with source citations
+- hosted multi-user deployment and web-session authentication
+
+## How It Works
+
+```text
+OneNote / OneDrive
+       │
+       ▼
+Microsoft Graph ──► Python service ──► SQLite cache
+                                         ├─ notebook/page metadata
+                                         ├─ embedded PDF bytes
+                                         └─ extracted text by PDF page
+                                                    │
+                                                    ▼
+                                     Browse UI + global search + PDF.js viewer
+```
+
+The browser reads cached data first for a fast startup. Graph refreshes metadata and supplies resources that are not yet local. Original PDFs are stored as SQLite blobs; extracted text is indexed per PDF page so a result can reopen the exact source location.
+
+## Requirements
+
+- Windows
+- Python 3.11 or newer
+- Git
+- A Microsoft Entra app registration configured as a public client
+- Delegated Microsoft Graph permissions: `User.Read` and `Notes.Read`
+
+The example configuration uses the `consumers` authority, which accepts personal Microsoft accounts only. To use a work or school account, the Entra registration and authority must support organizational accounts, and the organization must permit or approve the requested consent.
 
 ## Setup
 
 ```powershell
-cd "C:\Users\USER\OneDrive - University of Toronto\Desktop\one note references\onenote_pdf_indexer"
+git clone https://github.com/nastajus/onenote_pdf_indexer.git
+cd onenote_pdf_indexer
+
 py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -e .
+
+Copy-Item config\config.example.json config\config.json
 ```
 
-## Test Connection
+Edit `config/config.json` and replace the placeholder app-registration values. These identifiers are configuration, not passwords; the reusable token cache is sensitive and remains ignored by Git.
+
+## Connect to OneNote
+
+Verify the signed-in identity and cloud notebook structure:
 
 ```powershell
 .\.venv\Scripts\python.exe -m onenote_indexer whoami
@@ -34,127 +97,91 @@ py -m venv .venv
 .\.venv\Scripts\python.exe -m onenote_indexer pages --limit 25
 ```
 
-The first command opens a Microsoft sign-in page. Sign in as the personal Microsoft account that owns the copied notebook.
+If several Microsoft accounts are present, force the account chooser:
 
-If the browser redirect gets stuck, use device-code login:
+```powershell
+.\.venv\Scripts\python.exe -m onenote_indexer whoami `
+  --force-login `
+  --login-hint "name@example.com"
+```
+
+If the browser redirect cannot complete, use device-code login:
 
 ```powershell
 .\.venv\Scripts\python.exe -m onenote_indexer whoami --device-code --force-login
 ```
 
-When several Microsoft accounts are present, force the account chooser and preselect the intended identity:
+## Launch the Web App
+
+Start the local server:
 
 ```powershell
-.\.venv\Scripts\python.exe -m onenote_indexer whoami --force-login --login-hint "name@example.com"
+.\.venv\Scripts\python.exe -m onenote_indexer.webapp --host 127.0.0.1 --port 8765
 ```
 
-Inspect embedded resources on a page:
+Then open [http://127.0.0.1:8765](http://127.0.0.1:8765).
+
+For development, open the repository in VS Code and run **OneNote UI: Chrome**. The other included launch profiles start only the server or debug the notebook-listing CLI.
+
+## Fill or Refresh the Cache
+
+The default cache warmer is deliberately conservative:
 
 ```powershell
-.\.venv\Scripts\python.exe -m onenote_indexer resources --page-id "PASTE_PAGE_ID_HERE"
+.\.venv\Scripts\python.exe -m onenote_indexer warm-cache `
+  --max-pages 100 `
+  --max-mb 750 `
+  --delay 1.0
 ```
 
-Known OneNote/Graph behavior: large accounts should be scanned section-by-section. A global pages request can fail when there are many sections.
-
-## Launch In VS Code
-
-Open this folder in VS Code:
+It downloads original PDFs, extracts searchable text, skips existing files, and can be safely resumed. Useful variants:
 
 ```powershell
-code "C:\Users\USER\OneDrive - University of Toronto\Desktop\one note references\onenote_pdf_indexer"
-```
-
-Then use **Run and Debug** and choose:
-
-```text
-OneNote UI: Chrome
-```
-
-That starts the local Python server and opens Chrome at:
-
-```text
-http://127.0.0.1:8765
-```
-
-Other debug options:
-
-- `Debug OneNote web server` starts only the Python server.
-- `Debug OneNote CLI: notebooks` runs the notebook-listing CLI command under the debugger.
-
-## Current Browser Behavior
-
-- Notebooks and sections are cached in `data/cache.sqlite3`.
-- Cached notebooks/sections are shown immediately, then silently refreshed from Graph on startup, browser focus, and a slow interval.
-- This local project sorts the `Samira` notebook first when present.
-- Sections are clickable.
-- Page metadata loads section-by-section and is cached locally.
-- Embedded resources are cached locally after a page is inspected.
-- Embedded PDF bytes are cached locally and served back through `/api/resource`.
-- `image-fullres` resources are OneNote printout images, usually rendered PDF pages. These need OCR for text extraction.
-- `application/pdf` resources are original embedded PDFs. The app extracts and caches text from those PDFs by PDF page.
-- The server reads from cache before authenticating with Graph wherever possible.
-- The bottom control dock defaults to **Any**, which shows an embedded PDF when available and otherwise shows the OneNote page layout preview. Dedicated PDF, Text, and Page modes are still available.
-- **Search PDF Text** toggles full cached PDF-content search. Leave it off for fast title filtering; turn it on when you want results from extracted paper text and PDF page numbers.
-- The bottom cache bar shows downloaded/discovered PDF cache progress. Its tooltip explains the current denominator and rough remaining batch time.
-- Drag the vertical handles between columns to resize the notebook, page, and PDF/text panels.
-- Use each panel arrow to collapse/restore a panel when you want to maximize the PDF area.
-- Use **Reset Layout** to restore the default column layout and reopen collapsed panels.
-- The bottom sort controls can preserve the OneNote/Graph order or sort sections/pages by title, date, or PDF/cache status.
-- The bottom cache filter can show all pages, only locally downloaded PDFs, or only cached native OneNote-style pages.
-- Section cache badges summarize locally known cached pages/PDFs, and section edge colors can be toggled from the bottom controls.
-- A diamond marker on a page means embedded resources for that page are cached locally.
-- Page preview uses the original embedded PDF for PDF-dominant pages so text selection and PDF antialiasing remain available. Native OneNote-style pages use sanitized OneNote HTML.
-- Native OneNote pages that mix absolute-positioned text boxes with images are reflowed as a whole to prevent browser font/wrapping differences from making text and images collide.
-- Stale OneNote/Graph resource `404` responses are handled gracefully; cached resources are used first, missing refreshed resources are pruned, and page-content failures retry alternate cached Graph URLs before showing diagnostics.
-
-Use **Refresh** to force a fresh Graph fetch for notebooks, sections, and the selected section. OneNote/Graph can still take a short while to reflect newly created or deleted notebooks after OneDrive/OneNote sync.
-Use **Refresh Selected** to refresh the selected page/section and prune cached resource data for resources that no longer match the OneNote page.
-OneNote desktop sync errors are not exposed directly by Microsoft Graph. The app can detect cloud-side symptoms such as missing pages/resources, stale `404` resources, or changed counts after refresh, but the authoritative sync-error list still lives in OneNote desktop.
-
-## Warm The Cache
-
-Run a throttled cache fill from PowerShell:
-
-```powershell
-.\.venv\Scripts\python.exe -m onenote_indexer warm-cache --max-pages 100 --max-mb 750 --delay 1.0
-```
-
-Defaults are conservative: PDFs only, PDF text extraction enabled, 100 pages inspected, 750 MB max new downloads, and a 1 second delay around Graph fetches. The command is resumable and skips already cached PDFs.
-
-Useful variants:
-
-```powershell
+# Limit work to matching sections
 .\.venv\Scripts\python.exe -m onenote_indexer warm-cache --section "anapole" --max-pages 50
+
+# Include OneNote printout images as well as PDFs
 .\.venv\Scripts\python.exe -m onenote_indexer warm-cache --include-images --max-mb 250
+
+# Re-fetch page and resource metadata
 .\.venv\Scripts\python.exe -m onenote_indexer warm-cache --refresh-metadata
 ```
 
-If Microsoft Graph throttles a large run, schedule slow resumable passes after a cooldown:
+For large runs that trigger Microsoft Graph throttling, schedule slow resumable passes:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\resume_warm_cache.ps1
 Get-Content .\data\warm-cache-resume.log -Wait
 ```
 
-The helper waits 20 minutes by default, uses a five-second request delay, and makes three passes with 30-minute gaps. Existing downloads are skipped.
+## Technical Notes and Limitations
 
-## Git Checkpoints
+- `application/pdf` resources are original embedded PDFs and can be text-indexed directly.
+- `image-fullres` resources are normally OneNote printout images. They require OCR before their contents become searchable.
+- Large libraries are enumerated section by section because broad Graph page requests can fail or throttle.
+- Transient `429`, `500`, `502`, `503`, and `504` responses use retry and backoff. Cache warming remains resumable.
+- Cached resources are preferred when a refreshed Graph URL becomes stale or returns `404`.
+- Native OneNote HTML is sanitized and reflowed to reduce layout collisions caused by absolute-positioned text and images.
+- The custom viewer currently loads PDF.js from a CDN, so first use requires internet access even when the requested PDF is cached locally.
+- Graph can reveal cloud-side symptoms such as missing pages or stale resources, but authoritative desktop synchronization errors remain in OneNote’s **View Sync Status** dialog.
 
-Project-local Git automation lives at:
+## Local Data and Privacy
+
+The following files are intentionally excluded from Git:
+
+- `config/config.json` — local app-registration configuration
+- `data/token_cache.bin` — reusable Microsoft authentication tokens; do not share it
+- `data/cache.sqlite3` — notebook metadata, embedded resources, PDF bytes, and extracted text
+- `.venv/` — the local Python environment
+
+The server binds to `127.0.0.1` by default. Do not expose it to a network or the public internet without adding proper web authentication, HTTPS, access control, and protected token storage.
+
+## Development Checkpoints
+
+After relevant changes, commit and push the current branch with:
 
 ```powershell
 .\scripts\auto_commit.ps1 -Message "Codex checkpoint: short summary"
 ```
 
-It initializes a Git repository in `onenote_pdf_indexer` if needed, stages project files, and commits. It intentionally ignores `.venv/` and `data/`, including token/cache files.
-
-Git for Windows must be installed and available on `PATH`:
-
-```powershell
-git --version
-```
-
-## Local Files
-
-- `config/config.json` contains the app registration IDs. These are not secrets.
-- `data/token_cache.bin` is created after login and contains reusable auth tokens. Do not share it.
+Use `-NoPush` only when a local-only checkpoint is intentional.
