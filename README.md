@@ -2,6 +2,16 @@
 
 Local tooling for connecting to Microsoft Graph, reading OneNote notebook structure, and preparing a searchable PDF index.
 
+## Screenshots
+
+Browse the OneNote notebook hierarchy, inspect cached pages, and read the original embedded PDF in one workspace:
+
+![Browse workspace showing notebooks, sections, pages, and an embedded PDF](docs/screenshots/browse-workspace.png)
+
+Search extracted text across the full PDF library, grouped by OneNote section, with exact PDF-page navigation and selectable highlighted text:
+
+![Global PDF search showing grouped matches and highlighted text in the PDF viewer](docs/screenshots/global-search.png)
+
 ## Current Milestone
 
 This first pass only proves that Microsoft Graph can see the OneNote notebooks/pages in the personal Microsoft account.

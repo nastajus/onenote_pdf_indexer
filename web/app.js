@@ -728,7 +728,14 @@ function searchResultKey(result) {
 }
 
 function resourceLabel(resource, resourceUrl) {
-  return resource.alt || resource.name || resource.title || shortResourceUrl(resourceUrl);
+  const label = [resource.alt, resource.name, resource.title]
+    .map((value) => String(value || "").trim())
+    .find(isUsefulResourceLabel);
+  return label || shortResourceUrl(resourceUrl);
+}
+
+function isUsefulResourceLabel(value) {
+  return Boolean(value && !["$value", "content", "resource"].includes(value.toLowerCase()));
 }
 
 function shortResourceUrl(resourceUrl) {
@@ -739,7 +746,8 @@ function shortResourceUrl(resourceUrl) {
   try {
     const decoded = decodeURIComponent(value);
     const parts = decoded.split(/[/?#]/).filter(Boolean);
-    return parts.at(-1)?.slice(0, 80) || "Embedded PDF";
+    const label = parts.at(-1)?.slice(0, 80) || "";
+    return isUsefulResourceLabel(label) ? label : "Embedded PDF";
   } catch {
     return value.slice(0, 80);
   }
