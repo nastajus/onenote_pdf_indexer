@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/onenote-pdf-indexer-icon.png" alt="OneNote PDF Indexer icon" width="240">
+  <img src="docs/assets/onenote-pdf-indexer-icon-artistic.png" alt="OneNote PDF Indexer icon" width="240">
 </p>
 
 # OneNote PDF Indexer
