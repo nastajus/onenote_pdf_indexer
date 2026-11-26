@@ -4,11 +4,13 @@
 
 # OneNote PDF Indexer
 
-A private, local research browser for OneNote notebooks that contain embedded PDFs. It turns a large notebook into a searchable paper library while preserving the familiar notebook → section → page structure.
+OneNote PDF Indexer turns a OneNote notebook containing embedded PDFs into a browsable, searchable paper library. OneNote remains the organizational layer: notebooks contain sections, sections contain pages, and each research page is generally expected to contain one associated PDF.
+
+That one-page-to-one-PDF relationship is a design assumption rather than a hard requirement. A page can expose multiple embedded resources, but the interface is optimized for the common research-library pattern in which each OneNote page represents one paper.
 
 ## What It Does
 
-- **Browse the research library naturally.** Move from notebook to section to OneNote page, then read the associated paper without leaving the app.
+- **Browse the research library naturally.** Follow the same notebook → section → page structure used in OneNote, then read the page's associated paper without leaving the app.
 - **Search across many PDFs at once.** Find a term across the cached library instead of opening and searching papers individually.
 - **See where every result came from.** Results retain their OneNote section, OneNote page, PDF title, PDF page number, and a surrounding text snippet.
 - **Open directly at the match.** The custom PDF viewer jumps to the relevant page and overlays translucent highlights while keeping the PDF text selectable.
